@@ -1,4 +1,4 @@
-const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5080').replace(/\/$/, '');
+export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5080').replace(/\/$/, '');
 export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
 export async function api(path, options = {}) {
@@ -13,9 +13,10 @@ export async function api(path, options = {}) {
   });
 
   if (response.status === 401) {
-    sessionStorage.removeItem('churchmanager-token');
-    sessionStorage.removeItem('churchmanager-session');
-    if (!path.startsWith('/api/auth/')) {
+    // Não limpa imediatamente a sessão se a requisição for de login/registro (onde 401 significa apenas credencial incorreta)
+    if (!path.startsWith('/api/auth/login') && !path.startsWith('/api/auth/register')) {
+      sessionStorage.removeItem('churchmanager-token');
+      sessionStorage.removeItem('churchmanager-session');
       window.dispatchEvent(new CustomEvent('churchmanager:unauthorized'));
     }
   }
@@ -26,7 +27,7 @@ export async function api(path, options = {}) {
       const body = await response.json();
       message = body.message || body.title || message;
     } catch {
-      // A API pode retornar uma resposta sem corpo JSON.
+      // Resposta sem corpo JSON
     }
     if (response.status === 429) {
       message = 'Muitas tentativas em pouco tempo. Aguarde e tente novamente.';

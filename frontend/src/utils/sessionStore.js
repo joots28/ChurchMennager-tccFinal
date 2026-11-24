@@ -1,11 +1,12 @@
 const SESSION_KEY = 'churchmanager-session';
 const TOKEN_KEY = 'churchmanager-token';
 
-function tokenIsValid(token) {
+export function tokenIsValid(token) {
+  if (!token || typeof token !== 'string') return false;
   try {
-    const payloadPart = token.split('.')[1];
-    if (!payloadPart) return false;
-    const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+    const parts = token.split('.');
+    if (parts.length !== 3) return false;
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
     const payload = JSON.parse(atob(padded));
     return Number.isFinite(payload.exp) && payload.exp * 1000 > Date.now();
@@ -18,11 +19,10 @@ export function clearSession() {
   try {
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(TOKEN_KEY);
-    // Remove tokens legados de versões anteriores.
-    localStorage.removeItem('churchmanager-token');
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(TOKEN_KEY);
   } catch {
-    // A aplicação também precisa conseguir sair em navegadores com armazenamento restrito.
+    // Tratamento para ambientes com storage desativado
   }
 }
 
@@ -31,21 +31,22 @@ export function readSession(demoMode) {
     const storage = demoMode ? localStorage : sessionStorage;
     const stored = storage.getItem(SESSION_KEY);
     if (!stored) return null;
-    const user = JSON.parse(stored);
 
+    const user = JSON.parse(stored);
     if (!user || typeof user.name !== 'string' || typeof user.role !== 'string') {
       clearSession();
       return null;
     }
 
     if (demoMode) {
-      if (user.name !== 'Jonathan Otiniel' || user.role !== 'Administrador') {
+      if (user.role !== 'Administrador' && user.role !== 'Membro') {
         clearSession();
         return null;
       }
     } else {
       const token = sessionStorage.getItem(TOKEN_KEY);
-      if ((user.role !== 'Administrador' && user.role !== 'Membro') || !tokenIsValid(token || '')) {
+      const validRoles = ['Administrador', 'Membro', 'Igreja'];
+      if (!validRoles.includes(user.role) || !tokenIsValid(token || '')) {
         clearSession();
         return null;
       }
