@@ -1,15 +1,14 @@
 using System.ComponentModel.DataAnnotations;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text;
 using ChurchManager.Api.Data;
+using ChurchManager.Api.DTOs;
+using ChurchManager.Api.Interfaces;
 using ChurchManager.Api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 
 namespace ChurchManager.Api.Controllers;
 
@@ -17,179 +16,458 @@ namespace ChurchManager.Api.Controllers;
 [Route("api/auth")]
 public sealed class AuthController(
     AppDbContext db,
-    IConfiguration config,
-    IPasswordHasher<AppUser> hasher,
-    IWebHostEnvironment environment) : ControllerBase
+    IPasswordHasher<AppUser> userHasher,
+    IPasswordHasher<Church> churchHasher,
+    ITokenService tokenService,
+    ILogger<AuthController> logger) : ControllerBase
 {
+    /// <summary>
+    /// FLUXO 1 — Entrar como Igreja: Cadastro Institucional de Nova Igreja.
+    /// Único fluxo com permissão para criar uma nova igreja no sistema.
+    /// </summary>
     [AllowAnonymous]
     [EnableRateLimiting("Auth")]
-    [HttpPost("register")]
-    public async Task<IActionResult> Register(RegisterRequest request, CancellationToken cancellationToken)
+    [HttpPost("register-church")]
+    public async Task<IActionResult> RegisterChurch([FromBody] ChurchRegisterRequest request, CancellationToken cancellationToken)
     {
-        var allowPublicRegistration = bool.TryParse(
-            Environment.GetEnvironmentVariable("AUTH_ALLOW_PUBLIC_REGISTRATION"),
-            out var environmentSetting)
-            ? environmentSetting
-            : config.GetValue<bool>("Auth:AllowPublicRegistration");
-
-        if (!environment.IsDevelopment() && !allowPublicRegistration)
-            return StatusCode(StatusCodes.Status403Forbidden, new
-            {
-                message = "O cadastro de novas igrejas está temporariamente desativado. Solicite acesso ao administrador."
-            });
-
         var name = request.Name?.Trim() ?? string.Empty;
         var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
-        var churchName = request.ChurchName?.Trim() ?? string.Empty;
+        var denomination = request.Denomination?.Trim();
+        var phone = request.Phone?.Trim() ?? string.Empty;
+        var address = request.Address?.Trim() ?? string.Empty;
+        var logoUrl = request.LogoUrl?.Trim();
 
-        if (name.Length is < 2 or > 100 || churchName.Length is < 2 or > 100 ||
-            email.Length > 254 || !new EmailAddressAttribute().IsValid(email))
-            return BadRequest(new { message = "Informe nome, e-mail válido e nome da igreja." });
+        if (name.Length is < 2 or > 100)
+            return BadRequest(new { message = "O nome da igreja deve ter entre 2 e 100 caracteres." });
+
+        if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email))
+            return BadRequest(new { message = "Informe um e-mail institucional válido." });
 
         if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length is < 8 or > 128)
-            return BadRequest(new { message = "A senha deve ter entre 8 e 128 caracteres." });
+            return BadRequest(new { message = "A senha institucional deve ter entre 8 e 128 caracteres." });
 
-        if (await db.Users.AnyAsync(x => x.Email == email, cancellationToken))
-            return Conflict(new { message = "Já existe uma conta com esse e-mail." });
+        // Validação de duplicidade de igreja
+        if (await db.Churches.AnyAsync(c => c.Email == email, cancellationToken))
+            return Conflict(new { message = "Já existe uma igreja cadastrada com este e-mail institucional." });
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            var church = new Church { Name = churchName, Email = email };
+            var church = new Church
+            {
+                Name = name,
+                Denomination = denomination,
+                Email = email,
+                Phone = phone,
+                Address = address,
+                LogoUrl = logoUrl,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            church.PasswordHash = churchHasher.HashPassword(church, request.Password);
             db.Churches.Add(church);
             await db.SaveChangesAsync(cancellationToken);
 
+            // Cargos padrão da nova igreja
             var adminRole = new ChurchRole
             {
                 ChurchId = church.Id,
                 Name = "Administrador",
-                Description = "Administrador principal da igreja.",
+                Description = "Acesso completo à administração da igreja.",
                 PermissionsJson = "[\"Membros\",\"Eventos\",\"Financeiro\",\"Relatórios\",\"Configurações\",\"Perfil\",\"Escalas\"]",
-                Users = 1
+                Users = 0,
+                CreatedAt = DateTime.UtcNow
             };
-            db.Roles.Add(adminRole);
+            var leaderRole = new ChurchRole
+            {
+                ChurchId = church.Id,
+                Name = "Líder",
+                Description = "Gestão de eventos, escalas e equipes ministeriais.",
+                PermissionsJson = "[\"Membros\",\"Eventos\",\"Escalas\",\"Perfil\"]",
+                Users = 0,
+                CreatedAt = DateTime.UtcNow
+            };
+            var memberRole = new ChurchRole
+            {
+                ChurchId = church.Id,
+                Name = "Membro",
+                Description = "Acesso ao portal comunitário e escalas do membro.",
+                PermissionsJson = "[\"Eventos\",\"Escalas\",\"Perfil\"]",
+                Users = 0,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.Roles.AddRange(adminRole, leaderRole, memberRole);
             await db.SaveChangesAsync(cancellationToken);
+
+            // Registra no AuditLog o provisionamento institucional da igreja
+            db.AuditLogs.Add(new AuditLog
+            {
+                ChurchId = church.Id,
+                PerformedByEmail = church.Email,
+                Action = "ChurchRegistered",
+                Details = $"Igreja '{church.Name}' cadastrada com sucesso.",
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync(cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+
+            var token = tokenService.GenerateChurchInstitutionalToken(church);
+            return Ok(new AuthResponse(
+                token,
+                -church.Id,
+                church.Name,
+                church.Email,
+                "Igreja",
+                church.Id,
+                church.Name,
+                "church"
+            ));
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            logger.LogError(ex, "Erro ao registrar igreja: {Name}", name);
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                message = "Não foi possível concluir o cadastro da igreja. Verifique os dados e tente novamente."
+            });
+        }
+    }
+
+    /// <summary>
+    /// FLUXO 2 — Entrar como Membro: Cadastro de Conta Pessoal de Membro.
+    /// REGRA FUNDAMENTAL: Novos usuários sempre começam como Membros.
+    /// Requer a seleção de uma igreja já existente.
+    /// </summary>
+    [AllowAnonymous]
+    [EnableRateLimiting("Auth")]
+    [HttpPost("register-member")]
+    public async Task<IActionResult> RegisterMember([FromBody] MemberRegisterRequest request, CancellationToken cancellationToken)
+    {
+        var name = request.Name?.Trim() ?? string.Empty;
+        var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+        var phone = request.Phone?.Trim() ?? string.Empty;
+        var ministry = request.Ministry?.Trim() ?? string.Empty;
+
+        if (name.Length is < 2 or > 160)
+            return BadRequest(new { message = "O nome deve ter entre 2 e 160 caracteres." });
+
+        if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email))
+            return BadRequest(new { message = "Informe um e-mail válido." });
+
+        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length is < 8 or > 128)
+            return BadRequest(new { message = "A senha deve ter entre 8 e 128 caracteres." });
+
+        var church = await db.Churches.FirstOrDefaultAsync(c => c.Id == request.ChurchId && c.IsActive, cancellationToken);
+        if (church is null)
+            return BadRequest(new { message = "A igreja selecionada não foi encontrada ou está inativa." });
+
+        if (await db.Users.AnyAsync(u => u.Email == email, cancellationToken))
+            return Conflict(new { message = "Já existe uma conta cadastrada com esse e-mail." });
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var defaultRole = await db.Roles.FirstOrDefaultAsync(r => r.ChurchId == church.Id && r.Name == "Membro", cancellationToken);
 
             var user = new AppUser
             {
                 ChurchId = church.Id,
-                CargoId = adminRole.Id,
+                CargoId = defaultRole?.Id,
                 Name = name,
                 Email = email,
-                Role = "Administrador"
+                Phone = phone,
+                // REGRA INEGOCIÁVEL: Perfil inicial SEMPRE Membro!
+                Role = "Membro",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
             };
-            user.PasswordHash = hasher.HashPassword(user, request.Password);
+            user.PasswordHash = userHasher.HashPassword(user, request.Password);
             db.Users.Add(user);
+            await db.SaveChangesAsync(cancellationToken);
+
+            // Cria o registro correspondente em Members para constar na lista da igreja
+            var existingMember = await db.Members.FirstOrDefaultAsync(m => m.ChurchId == church.Id && m.Email == email, cancellationToken);
+            if (existingMember is null)
+            {
+                var member = new Member
+                {
+                    ChurchId = church.Id,
+                    UserId = user.Id,
+                    Name = name,
+                    Email = email,
+                    Phone = phone,
+                    Ministry = string.IsNullOrWhiteSpace(ministry) ? "Todos" : ministry,
+                    Role = "Membro",
+                    Status = "Ativo",
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.Members.Add(member);
+            }
+            else
+            {
+                existingMember.UserId = user.Id;
+                existingMember.Name = name;
+                if (!string.IsNullOrWhiteSpace(phone)) existingMember.Phone = phone;
+            }
+
+            if (defaultRole != null)
+            {
+                defaultRole.Users = await db.Users.CountAsync(u => u.ChurchId == church.Id && u.CargoId == defaultRole.Id, cancellationToken);
+            }
+
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
-            return Ok(CreateSession(user));
+            var token = tokenService.GenerateToken(
+                user.Id,
+                user.Name,
+                user.Email,
+                "Membro",
+                church.Id,
+                church.Name,
+                "member"
+            );
+
+            return Ok(new AuthResponse(
+                token,
+                user.Id,
+                user.Name,
+                user.Email,
+                "Membro",
+                church.Id,
+                church.Name,
+                "member"
+            ));
         }
-        catch (DbUpdateException)
+        catch (Exception ex)
         {
             await transaction.RollbackAsync(cancellationToken);
-            return Conflict(new { message = "Não foi possível concluir o cadastro. Verifique os dados e tente novamente." });
+            logger.LogError(ex, "Erro ao registrar membro: {Email}", email);
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                message = "Não foi possível concluir o cadastro. Verifique os dados e tente novamente."
+            });
         }
     }
 
+    /// <summary>
+    /// Rota legada de registro mantida para compatibilidade direta.
+    /// Se enviar 'churchName' cria a igreja institucional; se enviar 'churchId' cadastra o membro.
+    /// </summary>
+    [AllowAnonymous]
+    [EnableRateLimiting("Auth")]
+    [HttpPost("register")]
+    public async Task<IActionResult> RegisterLegacy([FromBody] LegacyRegisterRequest request, CancellationToken cancellationToken)
+    {
+        if (request.ChurchId > 0)
+        {
+            return await RegisterMember(new MemberRegisterRequest(
+                request.Name ?? string.Empty,
+                request.Email ?? string.Empty,
+                request.Password ?? string.Empty,
+                request.ChurchId,
+                request.Phone,
+                request.Ministry
+            ), cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ChurchName))
+        {
+            return await RegisterChurch(new ChurchRegisterRequest(
+                request.ChurchName,
+                request.Denomination,
+                request.Email ?? string.Empty,
+                request.Password ?? string.Empty,
+                request.Phone,
+                request.Address,
+                request.LogoUrl
+            ), cancellationToken);
+        }
+
+        return BadRequest(new { message = "Informe os dados da igreja ou selecione uma igreja cadastrada." });
+    }
+
+    /// <summary>
+    /// Autenticação unificada para as 3 modalidades:
+    /// 'church' -> Entrar como Igreja (credenciais institucionais da instituição)
+    /// 'admin' -> Entrar como Administrador (valida perfil de administrador da igreja)
+    /// 'member' -> Entrar como Membro (portal comunitário do membro)
+    /// </summary>
     [AllowAnonymous]
     [EnableRateLimiting("Login")]
     [HttpPost("login")]
-    public async Task<IActionResult> Login(LoginRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
         var identifier = request.Identifier?.Trim() ?? string.Empty;
         var password = request.Password ?? string.Empty;
-        var portal = request.Portal?.Trim().ToLowerInvariant() ?? "admin";
+        var accessMode = request.AccessMode?.Trim().ToLowerInvariant() ?? "admin";
 
         if (identifier.Length is 0 or > 254 || password.Length is 0 or > 128)
             return BadRequest(new { message = "Informe usuário/e-mail e senha." });
 
-        if (portal is not ("admin" or "member"))
-            return BadRequest(new { message = "Área de acesso inválida." });
+        if (accessMode is not ("church" or "admin" or "member"))
+            return BadRequest(new { message = "Modalidade de acesso inválida. Use 'church', 'admin' ou 'member'." });
 
+        // MODALIDADE 1: Entrar como Igreja
+        if (accessMode == "church")
+        {
+            Church? church;
+            if (identifier.Contains('@'))
+            {
+                church = await db.Churches.FirstOrDefaultAsync(
+                    c => c.Email == identifier.ToLowerInvariant() && c.IsActive,
+                    cancellationToken);
+            }
+            else
+            {
+                church = await db.Churches.FirstOrDefaultAsync(
+                    c => c.Name.ToUpper() == identifier.ToUpper() && c.IsActive,
+                    cancellationToken);
+            }
+
+            if (church is null || string.IsNullOrEmpty(church.PasswordHash) ||
+                churchHasher.VerifyHashedPassword(church, church.PasswordHash, password) == PasswordVerificationResult.Failed)
+            {
+                return Unauthorized(new { message = "Credenciais institucionais inválidas." });
+            }
+
+            var token = tokenService.GenerateChurchInstitutionalToken(church);
+            return Ok(new AuthResponse(
+                token,
+                -church.Id,
+                church.Name,
+                church.Email,
+                "Igreja",
+                church.Id,
+                church.Name,
+                "church"
+            ));
+        }
+
+        // MODALIDADES 2 e 3: Usuários Pessoais (Administrador ou Membro)
         AppUser? user;
         if (identifier.Contains('@'))
         {
-            var matches = await db.Users
-                .Where(x => x.Email == identifier.ToLowerInvariant() && x.IsActive)
-                .Take(2)
-                .ToListAsync(cancellationToken);
-            user = matches.Count == 1 ? matches[0] : null;
+            user = await db.Users
+                .Include(u => u.Church)
+                .FirstOrDefaultAsync(u => u.Email == identifier.ToLowerInvariant() && u.IsActive, cancellationToken);
         }
         else
         {
-            var matches = await db.Users
-                .Where(x => x.Name.ToUpper() == identifier.ToUpper() && x.IsActive)
-                .Take(2)
-                .ToListAsync(cancellationToken);
-            user = matches.Count == 1 ? matches[0] : null;
+            user = await db.Users
+                .Include(u => u.Church)
+                .FirstOrDefaultAsync(u => u.Name.ToUpper() == identifier.ToUpper() && u.IsActive, cancellationToken);
         }
 
         if (user is null ||
-            hasher.VerifyHashedPassword(user, user.PasswordHash, password) == PasswordVerificationResult.Failed)
+            userHasher.VerifyHashedPassword(user, user.PasswordHash, password) == PasswordVerificationResult.Failed)
+        {
             return Unauthorized(new { message = "Usuário ou senha inválidos." });
+        }
 
-        var isAdministrator = string.Equals(user.Role, "Administrador", StringComparison.OrdinalIgnoreCase);
-        if ((portal == "admin") != isAdministrator)
+        if (user.Church is null || !user.Church.IsActive)
+            return Unauthorized(new { message = "A igreja vinculada a esta conta está inativa ou não foi encontrada." });
+
+        var isAdmin = string.Equals(user.Role, "Administrador", StringComparison.OrdinalIgnoreCase);
+
+        // Se tentou entrar como Administrador mas não possui cargo de administrador
+        if (accessMode == "admin" && !isAdmin)
+        {
             return Unauthorized(new
             {
-                message = portal == "admin"
-                    ? "Esta conta não possui acesso administrativo. Entre pelo Portal do Membro."
-                    : "Esta conta pertence à administração. Entre pelo acesso administrativo."
+                message = "Esta conta não possui privilégios de Administrador. Acesse pelo Portal do Membro."
             });
+        }
 
-        return Ok(CreateSession(user));
+        var activeRole = isAdmin ? "Administrador" : "Membro";
+        var tokenValue = tokenService.GenerateToken(
+            user.Id,
+            user.Name,
+            user.Email,
+            activeRole,
+            user.ChurchId,
+            user.Church.Name,
+            accessMode
+        );
+
+        return Ok(new AuthResponse(
+            tokenValue,
+            user.Id,
+            user.Name,
+            user.Email,
+            activeRole,
+            user.ChurchId,
+            user.Church.Name,
+            accessMode
+        ));
+    }
+
+    /// <summary>
+    /// Validação da sessão ativa para restauração confiável sem erros 401 transitórios.
+    /// </summary>
+    [Authorize]
+    [HttpGet("me")]
+    public async Task<IActionResult> GetCurrentUser(CancellationToken cancellationToken)
+    {
+        var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        var churchIdStr = User.FindFirstValue("church_id");
+
+        if (!int.TryParse(churchIdStr, out var churchId))
+            return Unauthorized(new { message = "Sessão inválida: identificador da igreja ausente." });
+
+        var church = await db.Churches.AsNoTracking().FirstOrDefaultAsync(c => c.Id == churchId && c.IsActive, cancellationToken);
+        if (church is null)
+            return Unauthorized(new { message = "Igreja não encontrada ou inativa." });
+
+        if (string.Equals(role, "Igreja", StringComparison.OrdinalIgnoreCase))
+        {
+            return Ok(new
+            {
+                id = -church.Id,
+                name = church.Name,
+                email = church.Email,
+                role = "Igreja",
+                churchId = church.Id,
+                churchName = church.Name,
+                accessMode = "church"
+            });
+        }
+
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdStr, out var userId))
+            return Unauthorized(new { message = "Sessão inválida: identificador do usuário ausente." });
+
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.ChurchId == churchId && u.IsActive, cancellationToken);
+        if (user is null)
+            return Unauthorized(new { message = "Usuário não encontrado ou inativo." });
+
+        return Ok(new
+            {
+                id = user.Id,
+                name = user.Name,
+                email = user.Email,
+                role = user.Role,
+                churchId = church.Id,
+                churchName = church.Name,
+                accessMode = string.Equals(user.Role, "Administrador", StringComparison.OrdinalIgnoreCase) ? "admin" : "member"
+            });
     }
 
     [Authorize]
     [HttpPost("logout")]
     public IActionResult Logout() => NoContent();
-
-    private AuthResponse CreateSession(AppUser user)
-    {
-        var key = Environment.GetEnvironmentVariable("JWT_KEY") ?? config["Jwt:Key"];
-        if (string.IsNullOrWhiteSpace(key) || key.Length < 32)
-            throw new InvalidOperationException("JWT_KEY não foi configurada corretamente.");
-
-        var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER") ?? config["Jwt:Issuer"] ?? "ChurchManager.Api";
-        var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") ?? config["Jwt:Audience"] ?? "ChurchManager.Web";
-        var isAdministrator = string.Equals(user.Role, "Administrador", StringComparison.OrdinalIgnoreCase);
-
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Name),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Role, isAdministrator ? "Administrador" : "Membro"),
-            new Claim("church_id", user.ChurchId.ToString())
-        };
-
-        var credentials = new SigningCredentials(
-            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
-            SecurityAlgorithms.HmacSha256);
-
-        var token = new JwtSecurityToken(
-            issuer: issuer,
-            audience: audience,
-            claims: claims,
-            notBefore: DateTime.UtcNow,
-            expires: DateTime.UtcNow.AddMinutes(60),
-            signingCredentials: credentials);
-
-        var tokenValue = new JwtSecurityTokenHandler().WriteToken(token);
-        return new AuthResponse(tokenValue, user.Name, user.Email, isAdministrator ? "Administrador" : "Membro");
-    }
 }
 
-public sealed record RegisterRequest(
-    [param: Required, StringLength(100, MinimumLength = 2)] string Name,
-    [param: Required, EmailAddress, StringLength(254)] string Email,
-    [param: Required, StringLength(128, MinimumLength = 8)] string Password,
-    [param: Required, StringLength(100, MinimumLength = 2)] string ChurchName);
-
-public sealed record LoginRequest(
-    [param: Required, StringLength(254, MinimumLength = 1)] string Identifier,
-    [param: Required, StringLength(128, MinimumLength = 1)] string Password,
-    [param: StringLength(16)] string Portal = "admin");
-
-public sealed record AuthResponse(string Token, string Name, string Email, string Role);
+public sealed record LegacyRegisterRequest(
+    string? Name,
+    string? Email,
+    string? Password,
+    string? ChurchName,
+    int ChurchId = 0,
+    string? Denomination = null,
+    string? Phone = null,
+    string? Address = null,
+    string? LogoUrl = null,
+    string? Ministry = null);

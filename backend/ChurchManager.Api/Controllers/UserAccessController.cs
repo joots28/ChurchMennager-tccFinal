@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using ChurchManager.Api.Data;
+using ChurchManager.Api.Interfaces;
 using ChurchManager.Api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -10,9 +11,12 @@ using Microsoft.EntityFrameworkCore;
 namespace ChurchManager.Api.Controllers;
 
 [ApiController]
-[Authorize(Roles = "Administrador")]
+[Authorize(Roles = "Administrador,Igreja")]
 [Route("api/user-access")]
-public sealed class UserAccessController(AppDbContext db, IPasswordHasher<AppUser> hasher) : ControllerBase
+public sealed class UserAccessController(
+    AppDbContext db,
+    IPasswordHasher<AppUser> hasher,
+    IChurchNotificationService notificationService) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> Create(CreateMemberAccessRequest request, CancellationToken cancellationToken)
@@ -54,7 +58,8 @@ public sealed class UserAccessController(AppDbContext db, IPasswordHasher<AppUse
                     ChurchId = churchId,
                     Name = role,
                     Description = "Cargo da equipe da igreja.",
-                    PermissionsJson = "[]"
+                    PermissionsJson = "[]",
+                    CreatedAt = DateTime.UtcNow
                 };
                 db.Roles.Add(cargo);
                 await db.SaveChangesAsync(cancellationToken);
@@ -68,7 +73,8 @@ public sealed class UserAccessController(AppDbContext db, IPasswordHasher<AppUse
                 Phone = request.Phone?.Trim() ?? string.Empty,
                 Ministry = request.Ministry?.Trim() ?? string.Empty,
                 Status = status,
-                Role = role
+                Role = role,
+                CreatedAt = DateTime.UtcNow
             };
 
             var user = new AppUser
@@ -77,9 +83,11 @@ public sealed class UserAccessController(AppDbContext db, IPasswordHasher<AppUse
                 CargoId = cargo.Id,
                 Name = name,
                 Email = email,
-                // Cargo organizacional não concede privilégios administrativos na aplicação.
+                Phone = request.Phone?.Trim() ?? string.Empty,
+                // Cargo organizacional não concede privilégios de Administrador da aplicação
                 Role = "Membro",
-                IsActive = status == "Ativo"
+                IsActive = status == "Ativo",
+                CreatedAt = DateTime.UtcNow
             };
             user.PasswordHash = hasher.HashPassword(user, request.Password);
 
@@ -87,11 +95,13 @@ public sealed class UserAccessController(AppDbContext db, IPasswordHasher<AppUse
             db.Users.Add(user);
             await db.SaveChangesAsync(cancellationToken);
 
-            cargo.Users = await db.Users.CountAsync(
-                x => x.ChurchId == churchId && x.CargoId == cargo.Id,
-                cancellationToken);
+            member.UserId = user.Id;
+            cargo.Users = await db.Users.CountAsync(x => x.ChurchId == churchId && x.CargoId == cargo.Id, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
+
             await transaction.CommitAsync(cancellationToken);
+
+            await notificationService.NotifyEntityChangedAsync(churchId, "members", "created", member);
 
             return Created($"/api/members/{member.Id}", new
             {

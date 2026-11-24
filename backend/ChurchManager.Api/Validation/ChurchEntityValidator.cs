@@ -15,7 +15,7 @@ public static class ChurchEntityValidator
         Member x => Required(x.Name, "Nome completo", 160) ??
                     Optional(x.Email, "E-mail", 254) ?? EmailIfPresent(x.Email) ??
                     Optional(x.Phone, "Telefone", 40) ??
-                    Choice(x.Ministry, "Ministério", "Louvor", "Recepção", "Ministério Infantil", "Infantil", "Comunicação", "Assistência", "Jovens", "Todos") ??
+                    Choice(string.IsNullOrWhiteSpace(x.Ministry) ? "Todos" : x.Ministry, "Ministério", "Louvor", "Recepção", "Ministério Infantil", "Infantil", "Comunicação", "Assistência", "Jovens", "Todos") ??
                     Choice(x.Status, "Status", "Ativo", "Inativo") ??
                     Choice(x.Role, "Cargo", "Membro", "Líder", "Administrador", "Tesouraria"),
         Ministry x => Required(x.Name, "Nome do ministério", 160) ??
@@ -33,6 +33,11 @@ public static class ChurchEntityValidator
                                 Choice(x.Category, "Categoria", "Ofertas", "Contribuições", "Doações", "Despesas fixas", "Manutenção", "Eventos", "Outros") ??
                                 Choice(x.TransactionType, "Tipo de movimentação", "Income", "Expense") ??
                                 Choice(x.Method, "Método", "PIX", "Transferência", "Dinheiro", "Cartão", "Outro"),
+        Donation x => (x.Amount <= 0 || x.Amount > 9_999_999_999.99m || decimal.Round(x.Amount, 2) != x.Amount
+                          ? "Informe um valor de doação maior que zero." : null) ??
+                      Required(x.Category, "Categoria", 50) ??
+                      Optional(x.DonorName, "Nome do doador", 160) ??
+                      Choice(x.Status, "Status", "Pendente", "Confirmada", "Cancelada"),
         ChurchRole x => Required(x.Name, "Nome do cargo", 50) ?? Optional(x.Description, "Descrição", 500) ?? ValidatePermissions(x.PermissionsJson),
         ChurchScale x => Required(x.Title, "Nome da escala", 180) ??
                          Choice(x.Ministry, "Ministério", "Louvor", "Recepção", "Ministério Infantil", "Comunicação", "Assistência", "Jovens") ??
@@ -49,8 +54,9 @@ public static class ChurchEntityValidator
             case Ministry x: x.Name = Trim(x.Name); x.Description = Trim(x.Description); x.Coordinator = Trim(x.Coordinator); x.Status = Trim(x.Status); break;
             case ChurchEvent x: x.Title = Trim(x.Title); x.Description = Trim(x.Description); x.Location = Trim(x.Location); x.Ministry = Trim(x.Ministry); x.Status = Trim(x.Status); break;
             case FinanceTransaction x: x.Description = Trim(x.Description); x.Category = Trim(x.Category); x.TransactionType = Trim(x.TransactionType); x.Method = Trim(x.Method); break;
+            case Donation x: x.Category = Trim(x.Category); x.DonorName = Trim(x.DonorName); x.Status = Trim(x.Status); break;
             case ChurchRole x: x.Name = Trim(x.Name); x.Description = Trim(x.Description); x.PermissionsJson = string.IsNullOrWhiteSpace(x.PermissionsJson) ? "[]" : x.PermissionsJson.Trim(); break;
-            case ChurchScale x: x.Title = Trim(x.Title); x.Ministry = Trim(x.Ministry); x.Status = Trim(x.Status); x.AssignedMembersJson = string.IsNullOrWhiteSpace(x.AssignedMembersJson) ? "[]" : x.AssignedMembersJson.Trim(); x.LegacyMinistryName = Trim(x.Ministry); break;
+            case ChurchScale x: x.Title = Trim(x.Title); x.Ministry = Trim(x.Ministry); x.Status = Trim(x.Status); x.AssignedMembersJson = string.IsNullOrWhiteSpace(x.AssignedMembersJson) ? "[]" : x.AssignedMembersJson.Trim(); break;
         }
     }
 

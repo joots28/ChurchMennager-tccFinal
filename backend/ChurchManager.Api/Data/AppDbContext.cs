@@ -10,206 +10,221 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Member> Members => Set<Member>();
     public DbSet<Ministry> Ministries => Set<Ministry>();
     public DbSet<ChurchEvent> Events => Set<ChurchEvent>();
-    public DbSet<FinanceTransaction> Transactions => Set<FinanceTransaction>();
-    public DbSet<ChurchRole> Roles => Set<ChurchRole>();
+    public DbSet<EventAttendance> EventAttendances => Set<EventAttendance>();
     public DbSet<ChurchScale> Scales => Set<ChurchScale>();
+    public DbSet<ScaleParticipant> ScaleParticipants => Set<ScaleParticipant>();
+    public DbSet<FinanceTransaction> Transactions => Set<FinanceTransaction>();
+    public DbSet<Donation> Donations => Set<Donation>();
+    public DbSet<ChurchRole> Roles => Set<ChurchRole>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // The Render PostgreSQL database was created with the original English EF table names.
-        // The shared MySQL database used by the team keeps its legacy Portuguese names.
-        var usePostgresNames = Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
-
         modelBuilder.Entity<Church>(entity =>
         {
-            entity.ToTable(usePostgresNames ? "Churches" : "Igreja");
+            entity.ToTable("Churches");
             entity.HasKey(x => x.Id);
-            if (!usePostgresNames)
-            {
-                entity.Property(x => x.Id).HasColumnName("IdIgreja");
-                entity.Property(x => x.Name).HasColumnName("Nome");
-                entity.Property(x => x.Phone).HasColumnName("Telefone");
-                entity.Property(x => x.Address).HasColumnName("Endereco");
-            }
             entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Denomination).HasMaxLength(100);
             entity.Property(x => x.Email).HasMaxLength(254).IsRequired();
-            entity.Property(x => x.Phone).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Address).HasMaxLength(255).IsRequired();
-            entity.Property(x => x.CreatedAt);
+            entity.Property(x => x.PasswordHash).HasMaxLength(512);
+            entity.Property(x => x.Phone).HasMaxLength(40).HasDefaultValue("");
+            entity.Property(x => x.Address).HasMaxLength(250).HasDefaultValue("");
+            entity.Property(x => x.LogoUrl).HasMaxLength(500);
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(x => x.Email);
         });
 
         modelBuilder.Entity<AppUser>(entity =>
         {
-            entity.ToTable(usePostgresNames ? "Users" : "Usuario");
+            entity.ToTable("Users");
             entity.HasKey(x => x.Id);
-            if (!usePostgresNames)
-            {
-                entity.Property(x => x.Id).HasColumnName("IdUsuario");
-                entity.Property(x => x.ChurchId).HasColumnName("IdIgreja");
-                entity.Property(x => x.CargoId).HasColumnName("IdCargo");
-                entity.Property(x => x.Name).HasColumnName("Nome");
-                entity.Property(x => x.PasswordHash).HasColumnName("SenhaHash");
-                entity.Property(x => x.Role).HasColumnName("Perfil");
-                entity.Property(x => x.IsActive).HasColumnName("Ativo");
-            }
-            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
             entity.Property(x => x.Email).HasMaxLength(254).IsRequired();
-            entity.Property(x => x.PasswordHash).HasMaxLength(255).IsRequired();
-            entity.Property(x => x.Role).HasMaxLength(80).IsRequired();
-            entity.Property(x => x.CreatedAt);
+            entity.Property(x => x.PasswordHash).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.Cpf).HasMaxLength(14);
+            entity.Property(x => x.Phone).HasMaxLength(40);
+            entity.Property(x => x.PhotoUrl).HasMaxLength(500);
+            entity.Property(x => x.Role).HasMaxLength(80).HasDefaultValue("Membro").IsRequired();
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
             entity.HasIndex(x => x.Email).IsUnique();
-            entity.HasOne<Church>().WithMany().HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<ChurchRole>().WithMany().HasForeignKey(x => x.CargoId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.ChurchId);
+            entity.HasOne(x => x.Church).WithMany(c => c.Users).HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Cargo).WithMany().HasForeignKey(x => x.CargoId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Member>(entity =>
         {
-            entity.ToTable(usePostgresNames ? "Members" : "Membro");
+            entity.ToTable("Members");
             entity.HasKey(x => x.Id);
-            if (!usePostgresNames)
-            {
-                entity.Property(x => x.Id).HasColumnName("IdMembro");
-                entity.Property(x => x.ChurchId).HasColumnName("IdIgreja");
-                entity.Property(x => x.Name).HasColumnName("Nome");
-                entity.Property(x => x.Phone).HasColumnName("Telefone");
-                entity.Property(x => x.Ministry).HasColumnName("Ministerio");
-                entity.Property(x => x.Role).HasColumnName("Cargo");
-            }
             entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
-            entity.Property(x => x.Email).HasMaxLength(254).IsRequired();
-            entity.Property(x => x.Phone).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Ministry).HasMaxLength(120).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Role).HasMaxLength(80).IsRequired();
-            entity.Property(x => x.CreatedAt);
+            entity.Property(x => x.Email).HasMaxLength(254).HasDefaultValue("");
+            entity.Property(x => x.Phone).HasMaxLength(40).HasDefaultValue("");
+            entity.Property(x => x.Ministry).HasMaxLength(120).HasDefaultValue("");
+            entity.Property(x => x.Status).HasMaxLength(40).HasDefaultValue("Ativo");
+            entity.Property(x => x.Role).HasMaxLength(80).HasDefaultValue("Membro");
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
             entity.HasIndex(x => x.ChurchId);
-            entity.HasOne<Church>().WithMany().HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.ChurchId, x.Email });
+            entity.HasOne<Church>().WithMany(c => c.Members).HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Ministry>(entity =>
         {
-            entity.ToTable(usePostgresNames ? "Ministries" : "Ministerio");
+            entity.ToTable("Ministries");
             entity.HasKey(x => x.Id);
-            if (!usePostgresNames)
-            {
-                entity.Property(x => x.Id).HasColumnName("IdMinisterio");
-                entity.Property(x => x.ChurchId).HasColumnName("IdIgreja");
-                entity.Property(x => x.Name).HasColumnName("Nome");
-                entity.Property(x => x.Description).HasColumnName("Descricao");
-                entity.Property(x => x.Coordinator).HasColumnName("Coordenador");
-            }
             entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
-            entity.Property(x => x.Coordinator).HasMaxLength(160).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.CreatedAt);
+            entity.Property(x => x.Description).HasMaxLength(500).HasDefaultValue("");
+            entity.Property(x => x.Coordinator).HasMaxLength(160).HasDefaultValue("");
+            entity.Property(x => x.Status).HasMaxLength(40).HasDefaultValue("Ativo");
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
             entity.HasIndex(x => x.ChurchId);
-            entity.HasOne<Church>().WithMany().HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Church>().WithMany(c => c.Ministries).HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ChurchEvent>(entity =>
         {
-            entity.ToTable(usePostgresNames ? "Events" : "Evento");
+            entity.ToTable("Events");
             entity.HasKey(x => x.Id);
-            if (!usePostgresNames)
-            {
-                entity.Property(x => x.Id).HasColumnName("IdEvento");
-                entity.Property(x => x.ChurchId).HasColumnName("IdIgreja");
-                entity.Property(x => x.Title).HasColumnName("Titulo");
-                entity.Property(x => x.Description).HasColumnName("Descricao");
-                entity.Property(x => x.StartsAt).HasColumnName("DataHora");
-                entity.Property(x => x.Location).HasColumnName("Local");
-                entity.Property(x => x.Ministry).HasColumnName("Ministerio");
-                entity.Property(x => x.IsRestricted).HasColumnName("Restrito");
-                entity.Property(x => x.RecurrenceType).HasColumnName("TipoRepeticao");
-            }
             entity.Property(x => x.Title).HasMaxLength(100).IsRequired();
-            entity.Property(x => x.Description).IsRequired();
-            entity.Property(x => x.Location).HasMaxLength(255).IsRequired();
-            entity.Property(x => x.Ministry).HasMaxLength(120).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.RecurrenceType).HasMaxLength(50).IsRequired();
-            entity.Property(x => x.CreatedAt);
+            entity.Property(x => x.Description).HasDefaultValue("");
+            entity.Property(x => x.Location).HasMaxLength(255).HasDefaultValue("");
+            entity.Property(x => x.Ministry).HasMaxLength(120).HasDefaultValue("Todos");
+            entity.Property(x => x.Status).HasMaxLength(40).HasDefaultValue("Planejado");
+            entity.Property(x => x.IsRestricted).HasDefaultValue(false);
+            entity.Property(x => x.RecurrenceType).HasMaxLength(50).HasDefaultValue("Nenhuma");
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
             entity.HasIndex(x => x.ChurchId);
             entity.HasIndex(x => new { x.ChurchId, x.StartsAt });
-            entity.HasOne<Church>().WithMany().HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Church>().WithMany(c => c.Events).HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<FinanceTransaction>(entity =>
+        modelBuilder.Entity<EventAttendance>(entity =>
         {
-            entity.ToTable(usePostgresNames ? "Transactions" : "MovimentacaoFinanceira");
+            entity.ToTable("EventAttendances");
             entity.HasKey(x => x.Id);
-            if (!usePostgresNames)
-            {
-                entity.Property(x => x.Id).HasColumnName("IdMovimentacao");
-                entity.Property(x => x.ChurchId).HasColumnName("IdIgreja");
-                entity.Property(x => x.Description).HasColumnName("Descricao");
-                entity.Property(x => x.Category).HasColumnName("Categoria");
-                entity.Property(x => x.Amount).HasColumnName("Valor");
-                entity.Property(x => x.TransactionType).HasColumnName("Tipo");
-                entity.Property(x => x.TransactionDate).HasColumnName("DataMovimentacao");
-                entity.Property(x => x.Method).HasColumnName("Metodo");
-            }
-            entity.Property(x => x.Description).HasMaxLength(180).IsRequired();
-            entity.Property(x => x.Category).HasMaxLength(100).IsRequired();
-            entity.Property(x => x.Amount).HasPrecision(12, 2);
-            entity.Property(x => x.TransactionType).HasMaxLength(30).IsRequired();
-            entity.Property(x => x.Method).HasMaxLength(50).IsRequired();
-            entity.Property(x => x.CreatedAt);
-            entity.HasIndex(x => x.ChurchId);
-            entity.HasIndex(x => new { x.ChurchId, x.TransactionDate });
-            entity.HasOne<Church>().WithMany().HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
-        });
+            entity.Property(x => x.ConfirmedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-        modelBuilder.Entity<ChurchRole>(entity =>
-        {
-            entity.ToTable(usePostgresNames ? "Roles" : "Cargo");
-            entity.HasKey(x => x.Id);
-            if (!usePostgresNames)
-            {
-                entity.Property(x => x.Id).HasColumnName("IdCargo");
-                entity.Property(x => x.ChurchId).HasColumnName("IdIgreja");
-                entity.Property(x => x.Name).HasColumnName("Nome");
-                entity.Property(x => x.Description).HasColumnName("Descricao");
-                entity.Property(x => x.PermissionsJson).HasColumnName("PermissoesJson");
-                entity.Property(x => x.Users).HasColumnName("QuantidadeUsuarios");
-            }
-            entity.Property(x => x.Name).HasMaxLength(50).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
-            entity.Property(x => x.PermissionsJson).HasColumnType("text").IsRequired();
-            entity.Property(x => x.CreatedAt);
             entity.HasIndex(x => x.ChurchId);
+            entity.HasIndex(x => new { x.EventId, x.UserId }).IsUnique();
+            entity.HasOne(x => x.Event).WithMany(e => e.Attendances).HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<Church>().WithMany().HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ChurchScale>(entity =>
         {
-            entity.ToTable(usePostgresNames ? "Scales" : "Escala");
+            entity.ToTable("Scales");
             entity.HasKey(x => x.Id);
-            if (!usePostgresNames)
-            {
-                entity.Property(x => x.Id).HasColumnName("IdEscala");
-                entity.Property(x => x.ChurchId).HasColumnName("IdIgreja");
-                entity.Property(x => x.Title).HasColumnName("Titulo");
-                entity.Property(x => x.Ministry).HasColumnName("Ministerio");
-                entity.Property(x => x.StartsAt).HasColumnName("DataHora");
-                entity.Property(x => x.AssignedMembersJson).HasColumnName("MembrosJson");
-                entity.Property(x => x.EventId).HasColumnName("IdEvento");
-                entity.Property(x => x.LegacyMinistryName).HasColumnName("NomeMinisterio");
-            }
             entity.Property(x => x.Title).HasMaxLength(180).IsRequired();
             entity.Property(x => x.Ministry).HasMaxLength(120).IsRequired();
-            entity.Property(x => x.AssignedMembersJson).HasColumnType("text").IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.LegacyMinistryName).HasMaxLength(100).IsRequired();
-            entity.Property(x => x.CreatedAt);
+            entity.Property(x => x.AssignedMembersJson).HasColumnType("text").HasDefaultValue("[]");
+            entity.Property(x => x.Status).HasMaxLength(40).HasDefaultValue("Pendente");
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
             entity.HasIndex(x => x.ChurchId);
             entity.HasIndex(x => new { x.ChurchId, x.StartsAt });
+            entity.HasOne<Church>().WithMany(c => c.Scales).HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Event).WithMany(e => e.Scales).HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ScaleParticipant>(entity =>
+        {
+            entity.ToTable("ScaleParticipants");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.MemberName).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(50).HasDefaultValue("Confirmado");
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasIndex(x => x.ChurchId);
+            entity.HasIndex(x => x.ScaleId);
+            entity.HasOne(x => x.Scale).WithMany(s => s.Participants).HasForeignKey(x => x.ScaleId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<Church>().WithMany().HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<ChurchEvent>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<FinanceTransaction>(entity =>
+        {
+            entity.ToTable("Transactions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Description).HasMaxLength(180).IsRequired();
+            entity.Property(x => x.Category).HasMaxLength(100).HasDefaultValue("Outros");
+            entity.Property(x => x.Amount).HasPrecision(12, 2);
+            entity.Property(x => x.TransactionType).HasMaxLength(30).HasDefaultValue("Income");
+            entity.Property(x => x.Method).HasMaxLength(50).HasDefaultValue("PIX");
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasIndex(x => x.ChurchId);
+            entity.HasIndex(x => new { x.ChurchId, x.TransactionDate });
+            entity.HasOne<Church>().WithMany(c => c.Transactions).HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Donation).WithMany().HasForeignKey(x => x.DonationId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Donation>(entity =>
+        {
+            entity.ToTable("Donations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DonorName).HasMaxLength(160).HasDefaultValue("");
+            entity.Property(x => x.Amount).HasPrecision(10, 2);
+            entity.Property(x => x.Category).HasMaxLength(50).HasDefaultValue("Dízimo");
+            entity.Property(x => x.ReceiptUrl).HasMaxLength(500);
+            entity.Property(x => x.QrCode).HasMaxLength(500);
+            entity.Property(x => x.Status).HasMaxLength(50).HasDefaultValue("Pendente");
+            entity.Property(x => x.DonationDate).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasIndex(x => x.ChurchId);
+            entity.HasIndex(x => x.UserId);
+            entity.HasOne<Church>().WithMany(c => c.Donations).HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ChurchRole>(entity =>
+        {
+            entity.ToTable("Roles");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500).HasDefaultValue("");
+            entity.Property(x => x.PermissionsJson).HasColumnType("text").HasDefaultValue("[]");
+            entity.Property(x => x.Users).HasDefaultValue(0);
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasIndex(x => x.ChurchId);
+            entity.HasOne<Church>().WithMany(c => c.Roles).HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RolePermission>(entity =>
+        {
+            entity.ToTable("RolePermissions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Module).HasMaxLength(50).IsRequired();
+
+            entity.HasIndex(x => x.CargoId);
+            entity.HasOne(x => x.Cargo).WithMany(r => r.Permissions).HasForeignKey(x => x.CargoId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.ToTable("AuditLogs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PerformedByEmail).HasMaxLength(254).IsRequired();
+            entity.Property(x => x.TargetUserEmail).HasMaxLength(254);
+            entity.Property(x => x.Action).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Details).HasMaxLength(1000).HasDefaultValue("");
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasIndex(x => x.ChurchId);
+            entity.HasOne<Church>().WithMany().HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
