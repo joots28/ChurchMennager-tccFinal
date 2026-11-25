@@ -244,7 +244,13 @@ if (app.Configuration.GetValue<bool>("Database:ApplyMigrations") ||
     try
     {
         await db.Database.MigrateAsync();
-        await DatabaseSeeder.SeedAsync(db, userHasher, churchHasher, app.Logger);
+        // Dados de demonstração nunca são inseridos em produção.
+        // Em produção, a criação da primeira igreja ocorre pelo fluxo institucional.
+        if (app.Environment.IsDevelopment() &&
+            app.Configuration.GetValue<bool>("Database:SeedDevelopmentData"))
+        {
+            await DatabaseSeeder.SeedAsync(db, userHasher, churchHasher, app.Logger);
+        }
     }
     catch (Exception ex)
     {
