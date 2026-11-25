@@ -271,13 +271,13 @@ public class IntegrationTests(CustomWebApplicationFactory factory) : IClassFixtu
         Assert.NotNull(sessionB);
 
         // 3. Provisiona um administrador real para cada igreja pelo fluxo institucional inicial.
-        var adminAEmail = $"adminA_{Guid.NewGuid()}@teste.com";
+        var adminAEmail = $"admin_a_{Guid.NewGuid()}@teste.com";
         var passwordA = "SenhaAdminA@2026";
         var memberAResponse = await _client.PostAsJsonAsync("/api/auth/register-member", new MemberRegisterRequest(
             "Administrador Alpha", adminAEmail, passwordA, sessionA.ChurchId, null, null));
         Assert.Equal(HttpStatusCode.OK, memberAResponse.StatusCode);
 
-        var adminBEmail = $"adminB_{Guid.NewGuid()}@teste.com";
+        var adminBEmail = $"admin_b_{Guid.NewGuid()}@teste.com";
         var passwordB = "SenhaAdminB@2026";
         var memberBResponse = await _client.PostAsJsonAsync("/api/auth/register-member", new MemberRegisterRequest(
             "Administrador Beta", adminBEmail, passwordB, sessionB.ChurchId, null, null));
