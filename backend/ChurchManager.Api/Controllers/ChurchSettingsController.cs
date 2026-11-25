@@ -161,33 +161,33 @@ public sealed class ChurchSettingsController(
         if (member is null)
             return NotFound(new { message = "Membro não encontrado nesta igreja." });
 
-        // Localiza ou provisiona a conta de usuário (AppUser) do membro
-        var user = await db.Users.FirstOrDefaultAsync(u => u.ChurchId == churchId && (u.Id == member.UserId || u.Email == member.Email), cancellationToken);
+        // A conta institucional só pode realizar o provisionamento do PRIMEIRO administrador.
+        // Depois disso, somente um administrador já existente pode promover outros membros.
+        if (IsInstitutionalAccount)
+        {
+            var activeAdminCount = await db.Users.CountAsync(
+                u => u.ChurchId == churchId && u.Role == "Administrador" && u.IsActive,
+                cancellationToken);
+
+            if (activeAdminCount > 0)
+                return Forbid();
+        }
+        else if (!User.IsInRole("Administrador"))
+        {
+            return Forbid();
+        }
+
+        // A promoção exige uma conta pessoal já cadastrada pelo próprio membro.
+        // Nunca criar acesso administrativo com senha padrão ou conhecida.
+        var user = await db.Users.FirstOrDefaultAsync(
+            u => u.ChurchId == churchId && (u.Id == member.UserId || u.Email == member.Email),
+            cancellationToken);
 
         if (user is null)
-        {
-            if (string.IsNullOrWhiteSpace(member.Email))
-                return BadRequest(new { message = "O membro precisa ter um e-mail cadastrado para ter acesso de administrador." });
-
-            var adminCargo = await db.Roles.FirstOrDefaultAsync(r => r.ChurchId == churchId && r.Name == "Administrador", cancellationToken);
-
-            user = new AppUser
+            return BadRequest(new
             {
-                ChurchId = churchId,
-                CargoId = adminCargo?.Id,
-                Name = member.Name,
-                Email = member.Email,
-                Phone = member.Phone,
-                Role = "Administrador",
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
-            // Senha padrão inicial segura que deve ser alterada pelo usuário
-            user.PasswordHash = userHasher.HashPassword(user, "IgrejaAdmin@2026!");
-            db.Users.Add(user);
-            await db.SaveChangesAsync(cancellationToken);
-            member.UserId = user.Id;
-        }
+                message = "Este membro ainda não possui uma conta pessoal. Ele precisa se cadastrar como membro antes da promoção."
+            });
 
         user.Role = "Administrador";
         user.IsActive = true;
@@ -238,6 +238,8 @@ public sealed class ChurchSettingsController(
     [HttpPost("demote-admin")]
     public async Task<IActionResult> DemoteAdmin([FromBody] DemoteAdminRequest request, CancellationToken cancellationToken)
     {
+        // A conta institucional não administra cargos de usuários depois do provisionamento inicial.
+        if (IsInstitutionalAccount || !User.IsInRole("Administrador")) return Forbid();
         if (CurrentChurchId is not int churchId) return Unauthorized();
 
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UserId && u.ChurchId == churchId, cancellationToken);
