@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ChurchManager.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Roles = "Administrador,Membro")]
 [Route("api/donations")]
 public sealed class DonationsController(AppDbContext db, IChurchNotificationService notificationService) : ControllerBase
 {
