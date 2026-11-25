@@ -5,7 +5,6 @@ using ChurchManager.Api.DTOs;
 using ChurchManager.Api.Interfaces;
 using ChurchManager.Api.Models;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,8 +15,7 @@ namespace ChurchManager.Api.Controllers;
 [Route("api/church/settings")]
 public sealed class ChurchSettingsController(
     AppDbContext db,
-    IChurchNotificationService notificationService,
-    IPasswordHasher<AppUser> userHasher) : ControllerBase
+    IChurchNotificationService notificationService) : ControllerBase
 {
     private int? CurrentChurchId => int.TryParse(User.FindFirstValue("church_id"), out var id) ? id : null;
     private string CurrentUserEmail => User.FindFirstValue(ClaimTypes.Email) ?? "sistema@churchmanager";
@@ -197,7 +195,7 @@ public sealed class ChurchSettingsController(
         if (adminRole != null)
         {
             user.CargoId = adminRole.Id;
-            adminRole.Users = await db.Users.CountAsync(u => u.ChurchId == churchId && u.Role == "Administrador", cancellationToken);
+            adminRole.Users = await db.Users.CountAsync(u => u.ChurchId == churchId && u.Role == "Administrador" && u.IsActive, cancellationToken) + 1;
         }
 
         // Auditoria obrigatória
