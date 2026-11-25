@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { loadDemoData, saveDemoData } from '../services/demoStorage.js';
-import { api, apiLogin, apiResource, DEMO_MODE } from '../services/index.js';
+import {
+  api, API_URL, apiLogin, apiRegisterChurch, apiRegisterMember,
+  apiCheckSession, apiResource, DEMO_MODE,
+  initSignalR, subscribeToUpdates, stopSignalR
+} from '../services/index.js';
 import { moduleMeta } from '../config/navigation.js';
 import { humanRole } from '../utils/appHelpers.js';
 import useTheme from './useTheme.js';
@@ -9,28 +13,53 @@ import { clearSession, readSession, saveSession } from '../utils/sessionStore.js
 import { authenticateDemo } from '../services/demoAuthService.js';
 
 const emptyData = () => ({
-  members: [], ministries: [], events: [], transactions: [], roles: [], scales: [],
+  members: [],
+  ministries: [],
+  events: [],
+  transactions: [],
+  roles: [],
+  scales: [],
+  admins: [],
+  eligibleMembers: [],
+  auditLogs: [],
   settings: { churchName: '', email: '', phone: '', address: '', timezone: 'America/Sao_Paulo' }
 });
 
-async function loadRemoteData(role) {
-  if (humanRole(role) === 'Membro') {
-    const [events, scales, settings] = await Promise.all([
+async function loadRemoteData(user) {
+  if (user.role === 'Igreja') {
+    const [settings, admins, eligibleMembers] = await Promise.all([
+      api('/api/church/settings'),
+      api('/api/church/settings/admins'),
+      api('/api/church/settings/eligible-members')
+    ]);
+    return { settings, admins, eligibleMembers };
+  }
+
+  if (humanRole(user.role) === 'Membro') {
+    const [events, scales, settings, ministries] = await Promise.all([
       api('/api/member/events'),
       api('/api/member/scales'),
-      api('/api/member/settings')
+      api('/api/member/settings'),
+      api('/api/member/ministries')
     ]);
-    return { events, scales, settings };
+    return { events, scales, settings, ministries };
   }
 
   const names = ['members', 'ministries', 'events', 'transactions', 'roles', 'scales'];
   const loaded = await Promise.all([
     ...names.map(resource => apiResource(resource)),
-    api('/api/church/settings')
+    api('/api/church/settings'),
+    api('/api/church/settings/admins'),
+    api('/api/church/settings/eligible-members'),
+    api('/api/church/settings/audit-logs')
   ]);
+
   return {
     ...Object.fromEntries(names.map((resource, index) => [resource, loaded[index] || []])),
-    settings: loaded[6]
+    settings: loaded[6],
+    admins: loaded[7] || [],
+    eligibleMembers: loaded[8] || [],
+    auditLogs: loaded[9] || []
   };
 }
 
@@ -55,43 +84,70 @@ export default function useChurchManager() {
   useEffect(() => {
     const expireSession = () => {
       loadedRemoteData.current = false;
+      stopSignalR();
       clearSession();
       setUser(null);
       setModule('dashboard');
       setDialog(null);
       setData(emptyData());
     };
+
     window.addEventListener('churchmanager:unauthorized', expireSession);
     return () => window.removeEventListener('churchmanager:unauthorized', expireSession);
   }, []);
 
-  // Restaura apenas os dados que o perfil autenticado pode consultar.
+  // No F5, valida o JWT e recupera o perfil atual antes de carregar dados protegidos.
   useEffect(() => {
-    if (demo || !user || loadedRemoteData.current) return;
+    if (demo || !user || loadedRemoteData.current) return undefined;
     let active = true;
     loadedRemoteData.current = true;
 
     (async () => {
       try {
-        const loaded = await loadRemoteData(user.role);
+        const verifiedUser = await apiCheckSession();
+        if (!active) return;
+        saveSession(verifiedUser, false);
+        setUser(verifiedUser);
+
+        const loaded = await loadRemoteData(verifiedUser);
         if (active) setData(old => ({ ...old, ...loaded, settings: loaded.settings || old.settings }));
       } catch (error) {
         if (!active) return;
         loadedRemoteData.current = false;
+        stopSignalR();
         clearSession();
         setUser(null);
+        setData(emptyData());
         setToast(`A sessão não pôde ser restaurada: ${error.message}`);
       }
     })();
 
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [demo, user]);
+
+  // Atualizações em tempo real: o SignalR envia apenas metadados; os dados são
+  // recarregados pelos endpoints que já aplicam as permissões do usuário.
+  useEffect(() => {
+    if (demo || !user) return undefined;
+
+    initSignalR(API_URL);
+    const unsubscribe = subscribeToUpdates(payload => {
+      if (payload?.churchId && Number(payload.churchId) !== Number(user.churchId)) return;
+
+      loadRemoteData(user)
+        .then(loaded => setData(old => ({ ...old, ...loaded, settings: loaded.settings || old.settings })))
+        .catch(error => setToast(`Não foi possível atualizar os dados: ${error.message}`));
+    });
+
+    return () => {
+      unsubscribe();
+      stopSignalR();
+    };
+  }, [demo, user?.id, user?.role, user?.churchId]);
 
   useEffect(() => {
     if (!toast) return undefined;
-    const id = setTimeout(() => setToast(''), 3000);
+    const id = setTimeout(() => setToast(''), 4000);
     return () => clearTimeout(id);
   }, [toast]);
 
@@ -100,6 +156,7 @@ export default function useChurchManager() {
   const logout = () => {
     loadedRemoteData.current = false;
     setToast('');
+    stopSignalR();
     clearSession();
     setUser(null);
     setModule('dashboard');
@@ -107,24 +164,32 @@ export default function useChurchManager() {
     setData(demo ? loadDemoData() : emptyData());
   };
 
-  async function login(identifier, password) {
+  async function login(identifier, password, accessMode = 'admin') {
     const loginIdentifier = String(identifier || '').trim();
-    if (!loginIdentifier || !password) throw new Error('Informe seu usuário e senha.');
+    if (!loginIdentifier || !password) throw new Error('Informe seu e-mail e senha.');
 
-    const result = demo
-      ? { user: authenticateDemo(loginIdentifier, password) }
-      : await apiLogin(loginIdentifier, password);
+    let result;
+    if (demo) {
+      if (accessMode !== 'admin') {
+        throw new Error('O ambiente demonstrativo disponibiliza somente o acesso administrativo.');
+      }
+      result = { user: authenticateDemo(loginIdentifier, password) };
+    } else {
+      result = await apiLogin(loginIdentifier, password, accessMode);
+    }
+
     const next = result.user;
 
     if (!demo) {
       try {
-        const loaded = await loadRemoteData(next.role);
+        const loaded = await loadRemoteData(next);
         setData(old => ({ ...old, ...loaded, settings: loaded.settings || old.settings }));
         loadedRemoteData.current = true;
       } catch (error) {
         loadedRemoteData.current = false;
+        stopSignalR();
         clearSession();
-        throw new Error(`Não foi possível carregar os dados protegidos. ${error.message}`);
+        throw new Error(`Login realizado, mas não foi possível carregar os dados autorizados. ${error.message}`);
       }
     }
 
@@ -133,23 +198,32 @@ export default function useChurchManager() {
     setModule('dashboard');
   }
 
-  async function register(values) {
-    if (demo) throw new Error('O cadastro está desativado nesta demonstração. Use o acesso autorizado.');
+  async function register(values, accessMode) {
+    if (demo) throw new Error('O cadastro real está desativado no ambiente demonstrativo.');
 
-    const result = await api('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: values.name,
-        email: values.email,
-        password: values.password,
-        churchName: values.church
-      })
-    });
+    let result;
+    if (accessMode === 'church') {
+      result = await apiRegisterChurch(values);
+    } else if (accessMode === 'member') {
+      result = await apiRegisterMember(values);
+    } else {
+      throw new Error('O cadastro pessoal deve ser realizado como membro. Administradores são designados nas configurações.');
+    }
 
-    if (result.token) sessionStorage.setItem('churchmanager-token', result.token);
-    const next = { name: result.name, email: result.email, role: result.role || 'Administrador' };
-    saveSession(next, false);
-    setUser(next);
+    const next = result.user;
+    try {
+      const loaded = await loadRemoteData(next);
+      setData(old => ({ ...old, ...loaded, settings: loaded.settings || old.settings }));
+      loadedRemoteData.current = true;
+      saveSession(next, false);
+      setUser(next);
+      setModule('dashboard');
+    } catch (error) {
+      loadedRemoteData.current = false;
+      stopSignalR();
+      clearSession();
+      throw new Error(`Conta criada, mas não foi possível carregar o ambiente. ${error.message}`);
+    }
   }
 
   const {
