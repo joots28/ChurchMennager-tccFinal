@@ -246,3 +246,114 @@ body[data-theme="dark"] .auth-demo-hint {
     padding-bottom: 12px;
   }
 }
+
+
+.auth-portals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 14px 24px 0;
+  padding: 5px;
+  background: #e2e8f0;
+  border-radius: 12px;
+}
+
+.auth-portals button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 9px;
+  padding: 7px 5px;
+  background: transparent;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-portals button.active {
+  background: #fff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
+}
+
+.auth-select-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-select-field label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.auth-select-field input,
+.auth-select-field select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 14px;
+}
+
+.auth-select-field small,
+.auth-access-note {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.auth-access-note {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+body[data-theme="dark"] .auth-portals {
+  background: #1e293b;
+}
+
+body[data-theme="dark"] .auth-portals button {
+  color: #cbd5e1;
+}
+
+body[data-theme="dark"] .auth-portals button.active {
+  background: #334155;
+  color: #bfdbfe;
+}
+
+body[data-theme="dark"] .auth-select-field label {
+  color: #cbd5e1;
+}
+
+body[data-theme="dark"] .auth-select-field input,
+body[data-theme="dark"] .auth-select-field select {
+  background: #0f172a;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+body[data-theme="dark"] .auth-access-note {
+  background: #172554;
+  border-color: #1d4ed8;
+  color: #dbeafe;
+}
+
+@media (max-width: 360px) {
+  .auth-portals {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  .auth-portals button {
+    font-size: 11px;
+  }
+}
