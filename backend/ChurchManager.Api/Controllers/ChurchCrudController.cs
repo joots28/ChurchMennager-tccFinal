@@ -18,6 +18,24 @@ public abstract class ChurchCrudController<T>(AppDbContext db, IChurchNotificati
     protected int? CurrentChurchId => int.TryParse(User.FindFirstValue("church_id"), out var id) ? id : null;
     protected abstract string ResourceName { get; }
 
+    private async Task<string?> ValidateReferencesAsync(T item, int churchId)
+    {
+        // Todo vínculo enviado pelo cliente deve apontar para um registro da mesma igreja.
+        if (item is Member member && member.UserId is int userId &&
+            !await Db.Users.AnyAsync(user => user.Id == userId && user.ChurchId == churchId))
+            return "A conta de usuário selecionada não pertence a esta igreja.";
+
+        if (item is ChurchScale scale && scale.EventId is int eventId &&
+            !await Db.Events.AnyAsync(churchEvent => churchEvent.Id == eventId && churchEvent.ChurchId == churchId))
+            return "O evento selecionado não pertence a esta igreja.";
+
+        if (item is FinanceTransaction transaction && transaction.DonationId is int donationId &&
+            !await Db.Donations.AnyAsync(donation => donation.Id == donationId && donation.ChurchId == churchId))
+            return "A doação vinculada não pertence a esta igreja.";
+
+        return null;
+    }
+
     [HttpGet]
     public virtual async Task<IActionResult> GetAll()
     {
@@ -59,6 +77,9 @@ public abstract class ChurchCrudController<T>(AppDbContext db, IChurchNotificati
     {
         if (CurrentChurchId is not int churchId) return Unauthorized();
 
+        if (await ValidateReferencesAsync(item, churchId) is { } referenceError)
+            return BadRequest(new { message = referenceError });
+
         // REGRA DE SEGURANÇA: Cargo Administrador só pode ser atribuído pela promoção em Configurações
         if (item is Member member && string.Equals(member.Role, "Administrador", StringComparison.OrdinalIgnoreCase))
             return BadRequest(new { message = "O cargo Administrador só pode ser atribuído pelo fluxo seguro de promoção em Configurações." });
@@ -89,6 +110,9 @@ public abstract class ChurchCrudController<T>(AppDbContext db, IChurchNotificati
 
         var current = await Db.Set<T>().FirstOrDefaultAsync(x => x.Id == id && x.ChurchId == churchId);
         if (current is null) return NotFound();
+
+        if (await ValidateReferencesAsync(input, churchId) is { } referenceError)
+            return BadRequest(new { message = referenceError });
 
         if (input is Member member && string.Equals(member.Role, "Administrador", StringComparison.OrdinalIgnoreCase))
             return BadRequest(new { message = "O cargo Administrador só pode ser atribuído pelo fluxo seguro de promoção em Configurações." });
