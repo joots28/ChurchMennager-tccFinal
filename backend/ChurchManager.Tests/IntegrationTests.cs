@@ -402,9 +402,27 @@ public class IntegrationTests(CustomWebApplicationFactory factory) : IClassFixtu
         Assert.NotNull(myDonations);
         Assert.Contains(myDonations, d => d.Amount == 250.00m && d.Category == "Dízimo");
 
-        // Administrador verifica resumo financeiro da igreja com a transação gerada
+        // Provisiona o administrador pelo fluxo institucional, sem usar a identidade da igreja como administrador.
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var donorMember = await db.Members.FirstAsync(m => m.Email == memberEmail);
+
+        var institutionalClient = factory.CreateClient();
+        institutionalClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
+        var promoteResponse = await institutionalClient.PostAsJsonAsync(
+            "/api/church/settings/promote-admin",
+            new PromoteAdminRequest(donorMember.Id));
+        Assert.Equal(HttpStatusCode.OK, promoteResponse.StatusCode);
+
+        var adminLogin = await _client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest(memberEmail, "SenhaDoador@2026", AccessMode: "admin"));
+        Assert.Equal(HttpStatusCode.OK, adminLogin.StatusCode);
+        var adminSession = await adminLogin.Content.ReadFromJsonAsync<AuthResponse>();
+
+        // Administrador verifica resumo financeiro da própria igreja.
         var adminClient = factory.CreateClient();
-        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
+        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminSession!.Token);
         var summaryRes = await adminClient.GetAsync("/api/transactions/summary");
         Assert.Equal(HttpStatusCode.OK, summaryRes.StatusCode);
     }
