@@ -60,7 +60,7 @@ export default function ChurchInstitutionalPortal({ user, data, onLogout, theme,
         <Brand />
         <div className="institution-header-actions">
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-          <Button type="button" variant="secondary" onClick={onLogout}>Sair</Button>
+          <Button type="button" onClick={onLogout}>Sair</Button>
         </div>
       </header>
 
