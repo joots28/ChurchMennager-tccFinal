@@ -79,13 +79,12 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
       }
 
       if (accessMode === 'church') {
-        if (form.name.trim().length < 2 || form.churchName.trim().length < 2 || !form.email.trim()) {
-          throw new Error('Preencha o nome do responsável, o nome da igreja e o e-mail institucional.');
+        if (form.churchName.trim().length < 2 || !form.email.trim()) {
+          throw new Error('Preencha o nome da igreja e o e-mail institucional.');
         }
 
         await onRegister({
-          name: form.name.trim(),
-          churchName: form.churchName.trim(),
+          name: form.churchName.trim(),
           denomination: form.denomination.trim(),
           email: form.email.trim(),
           password: form.password,
@@ -168,17 +167,17 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
           <form id="auth-form" className="auth-form" onSubmit={submit}>
             {isRegister && (
               <>
-                <InputField
-                  label={isChurch ? 'Nome do responsável' : 'Nome completo'}
-                  name="name" value={form.name} onChange={change}
-                  placeholder="Seu nome e sobrenome" icon="user"
-                  minLength={2} maxLength={160} autoComplete="name" required
-                />
-                {isChurch && (
+                {isChurch ? (
                   <>
                     <InputField label="Nome da igreja" name="churchName" value={form.churchName} onChange={change} placeholder="Nome oficial da igreja" icon="building" minLength={2} maxLength={100} required />
                     <InputField label="Denominação (opcional)" name="denomination" value={form.denomination} onChange={change} placeholder="Ex.: Batista, Metodista..." maxLength={100} />
                   </>
+                ) : (
+                  <InputField
+                    label="Nome completo" name="name" value={form.name} onChange={change}
+                    placeholder="Seu nome e sobrenome" icon="user"
+                    minLength={2} maxLength={160} autoComplete="name" required
+                  />
                 )}
               </>
             )}
