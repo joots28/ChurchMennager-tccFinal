@@ -129,7 +129,7 @@ public sealed class ChurchSettingsController(
         if (CurrentChurchId is not int churchId) return Unauthorized();
 
         var members = await db.Members.AsNoTracking()
-            .Where(m => m.ChurchId == churchId && m.Status == "Ativo")
+            .Where(m => m.ChurchId == churchId && m.Status == "Ativo" && m.Role != "Administrador")
             .OrderBy(m => m.Name)
             .Select(m => new
             {
@@ -186,6 +186,9 @@ public sealed class ChurchSettingsController(
             {
                 message = "Este membro ainda não possui uma conta pessoal. Ele precisa se cadastrar como membro antes da promoção."
             });
+
+        if (string.Equals(user.Role, "Administrador", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Este membro já possui acesso administrativo." });
 
         user.Role = "Administrador";
         user.IsActive = true;
