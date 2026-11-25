@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ChurchManager.Api.Controllers;
 
 [ApiController]
-[Authorize(Roles = "Administrador,Igreja")]
+[Authorize(Roles = "Administrador")]
 public abstract class ChurchCrudController<T>(AppDbContext db, IChurchNotificationService notificationService) : ControllerBase where T : class, IChurchOwnedEntity, new()
 {
     protected AppDbContext Db { get; } = db;
