@@ -43,3 +43,7 @@ jobs:
         run: dotnet restore backend/ChurchManager.Api/ChurchManager.Api.csproj
       - name: Build API
         run: dotnet build backend/ChurchManager.Api/ChurchManager.Api.csproj --configuration Release --no-restore
+      - name: Restore integration tests
+        run: dotnet restore backend/ChurchManager.Tests/ChurchManager.Tests.csproj
+      - name: Run integration tests
+        run: dotnet test backend/ChurchManager.Tests/ChurchManager.Tests.csproj --configuration Release --no-restore
