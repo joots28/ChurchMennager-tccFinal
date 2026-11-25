@@ -372,12 +372,20 @@ public sealed class AuthController(
 
         var isAdmin = string.Equals(user.Role, "Administrador", StringComparison.OrdinalIgnoreCase);
 
-        // Se tentou entrar como Administrador mas não possui cargo de administrador
+        // Cada perfil deve entrar exclusivamente pelo seu ambiente.
         if (accessMode == "admin" && !isAdmin)
         {
             return Unauthorized(new
             {
                 message = "Esta conta não possui privilégios de Administrador. Acesse pelo Portal do Membro."
+            });
+        }
+
+        if (accessMode == "member" && isAdmin)
+        {
+            return Unauthorized(new
+            {
+                message = "Esta conta pertence à administração. Utilize o acesso de Administrador."
             });
         }
 
