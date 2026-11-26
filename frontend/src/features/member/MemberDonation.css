@@ -36,3 +36,101 @@
     width: 100%;
   }
 }
+
+
+.member-donation-history {
+  margin-top: 18px;
+}
+
+.member-donation-history-list {
+  padding: 2px 20px;
+}
+
+.member-donation-history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.member-donation-history-row:last-child {
+  border-bottom: 0;
+}
+
+.member-donation-history-info,
+.member-donation-history-value {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.member-donation-history-info strong,
+.member-donation-history-value strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.member-donation-history-info small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.member-donation-history-value {
+  align-items: flex-end;
+  flex: none;
+}
+
+.donation-empty {
+  padding: 14px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.donation-form-note,
+.donation-form-error {
+  grid-column: 1 / -1;
+}
+
+.donation-form-note {
+  padding: 12px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+html[data-theme="dark"] .member-donation-history-row {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .member-donation-history-info strong,
+html[data-theme="dark"] .member-donation-history-value strong {
+  color: #e5e7eb;
+}
+
+html[data-theme="dark"] .member-donation-history-info small,
+html[data-theme="dark"] .donation-empty {
+  color: #a7b3c5;
+}
+
+html[data-theme="dark"] .donation-form-note {
+  color: #bfdbfe;
+  background: #172554;
+  border-color: #1e40af;
+}
+
+@media (max-width: 540px) {
+  .member-donation-history-list {
+    padding: 0 13px;
+  }
+
+  .member-donation-history-row {
+    align-items: flex-start;
+    gap: 10px;
+  }
+}

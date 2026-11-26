@@ -253,41 +253,17 @@ public sealed class AuthController(
     }
 
     /// <summary>
-    /// Rota legada de registro mantida para compatibilidade direta.
-    /// Se enviar 'churchName' cria a igreja institucional; se enviar 'churchId' cadastra o membro.
+    /// Endpoint legado desativado. Utilize register-church ou register-member
+    /// conforme a modalidade de acesso, sem misturar os dois fluxos.
     /// </summary>
     [AllowAnonymous]
-    [EnableRateLimiting("Auth")]
     [HttpPost("register")]
-    public async Task<IActionResult> RegisterLegacy([FromBody] LegacyRegisterRequest request, CancellationToken cancellationToken)
-    {
-        if (request.ChurchId > 0)
+    public IActionResult RegisterLegacy() =>
+        StatusCode(StatusCodes.Status410Gone, new
         {
-            return await RegisterMember(new MemberRegisterRequest(
-                request.Name ?? string.Empty,
-                request.Email ?? string.Empty,
-                request.Password ?? string.Empty,
-                request.ChurchId,
-                request.Phone,
-                request.Ministry
-            ), cancellationToken);
-        }
+            message = "Este cadastro legado foi desativado. Utilize o fluxo Entrar como Igreja ou Entrar como Membro."
+        });
 
-        if (!string.IsNullOrWhiteSpace(request.ChurchName))
-        {
-            return await RegisterChurch(new ChurchRegisterRequest(
-                request.ChurchName,
-                request.Denomination,
-                request.Email ?? string.Empty,
-                request.Password ?? string.Empty,
-                request.Phone,
-                request.Address,
-                request.LogoUrl
-            ), cancellationToken);
-        }
-
-        return BadRequest(new { message = "Informe os dados da igreja ou selecione uma igreja cadastrada." });
-    }
 
     /// <summary>
     /// Autenticação unificada para as 3 modalidades:
@@ -305,7 +281,10 @@ public sealed class AuthController(
         var accessMode = request.AccessMode?.Trim().ToLowerInvariant() ?? "admin";
 
         if (identifier.Length is 0 or > 254 || password.Length is 0 or > 128)
-            return BadRequest(new { message = "Informe usuário/e-mail e senha." });
+            return BadRequest(new { message = "Informe e-mail e senha." });
+
+        if (!identifier.Contains('@') || !new EmailAddressAttribute().IsValid(identifier))
+            return BadRequest(new { message = "Utilize o e-mail cadastrado para entrar." });
 
         if (accessMode is not ("church" or "admin" or "member"))
             return BadRequest(new { message = "Modalidade de acesso inválida. Use 'church', 'admin' ou 'member'." });
@@ -372,12 +351,20 @@ public sealed class AuthController(
 
         var isAdmin = string.Equals(user.Role, "Administrador", StringComparison.OrdinalIgnoreCase);
 
-        // Se tentou entrar como Administrador mas não possui cargo de administrador
+        // Cada perfil deve entrar exclusivamente pelo seu ambiente.
         if (accessMode == "admin" && !isAdmin)
         {
             return Unauthorized(new
             {
                 message = "Esta conta não possui privilégios de Administrador. Acesse pelo Portal do Membro."
+            });
+        }
+
+        if (accessMode == "member" && isAdmin)
+        {
+            return Unauthorized(new
+            {
+                message = "Esta conta pertence à administração. Utilize o acesso de Administrador."
             });
         }
 

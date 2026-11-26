@@ -97,6 +97,7 @@ public sealed record AdminUserResponse(
 public sealed record CreateDonationRequest(
     [param: Required, Range(0.01, 9999999999.99)] decimal Amount,
     [param: Required, StringLength(50)] string Category,
+    [param: Required, StringLength(30)] string PaymentMethod,
     [param: StringLength(500)] string? ReceiptUrl,
     [param: StringLength(500)] string? QrCode,
     [param: StringLength(160)] string? DonorName);
@@ -107,6 +108,7 @@ public sealed record DonationResponse(
     string DonorName,
     decimal Amount,
     string Category,
+    string PaymentMethod,
     string? ReceiptUrl,
     string? QrCode,
     string Status,

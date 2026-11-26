@@ -321,6 +321,9 @@ public sealed class Donation : ChurchEntity
     [Required, StringLength(50)]
     public string Category { get; set; } = "Dízimo";
 
+    [Required, StringLength(30)]
+    public string PaymentMethod { get; set; } = "PIX";
+
     [StringLength(500)]
     public string? ReceiptUrl { get; set; }
 

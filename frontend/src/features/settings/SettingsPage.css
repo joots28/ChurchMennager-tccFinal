@@ -71,3 +71,98 @@
     margin: 0 16px;
   }
 }
+
+
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.access-management-panel {
+  padding-bottom: 12px;
+}
+
+.access-list {
+  padding: 0 20px;
+}
+
+.access-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.access-row:last-child {
+  border-bottom: 0;
+}
+
+.access-row > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.access-row strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.access-row span,
+.access-row small,
+.access-empty {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.access-row small {
+  color: #2563eb;
+}
+
+.access-section-heading {
+  padding: 18px 20px 6px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.access-section-heading h3 {
+  margin: 0 0 5px;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.access-section-heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.access-empty {
+  margin: 14px 0;
+}
+
+@media (max-width: 600px) {
+  .access-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .access-row .btn {
+    width: 100%;
+  }
+
+  .access-list {
+    padding: 0 16px;
+  }
+
+  .access-section-heading {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

@@ -18,9 +18,6 @@ export default function Topbar({ user, meta, demo, theme, toggleTheme, setMobile
       <div className="topbar-actions">
         <span className={`mode-tag ${demo ? 'demo' : 'live'}`}>{demo ? 'Demonstração' : 'API conectada'}</span>
 <ThemeToggle theme={theme} onToggle={toggleTheme} className="icon-button" />
-        <button className="icon-button notification-button" type="button" title="Notificações" aria-label="Notificações">
-          <Icon name="bell" size={19} /><i />
-        </button>
         <div className="topbar-user">
           <Avatar label={user.name.slice(0, 1).toUpperCase()} variant="blue" />
           <span><strong>{user.name}</strong><small>{user.role}</small></span>

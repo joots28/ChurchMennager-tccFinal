@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ChurchManager.Api.Controllers;
 
 [ApiController]
-[Authorize(Roles = "Administrador,Igreja")]
+[Authorize(Roles = "Administrador")]
 [Route("api/user-access")]
 public sealed class UserAccessController(
     AppDbContext db,

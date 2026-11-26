@@ -14,7 +14,9 @@ public sealed class ChurchNotificationService(IHubContext<ChurchHub> hubContext)
             churchId,
             resource,
             action,
-            data,
+            // Enviar somente metadados; o cliente busca os dados pelos endpoints autorizados.
+            // Isso impede vazamento de registros administrativos para conexões de membros.
+            data = (object?)null,
             timestamp = DateTime.UtcNow
         });
     }

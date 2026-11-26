@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Claims;
 using ChurchManager.Api.Data;
 using ChurchManager.Api.DTOs;
@@ -11,17 +12,27 @@ using Microsoft.EntityFrameworkCore;
 namespace ChurchManager.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Roles = "Administrador,Membro")]
 [Route("api/donations")]
 public sealed class DonationsController(AppDbContext db, IChurchNotificationService notificationService) : ControllerBase
 {
+    private static readonly HashSet<string> AllowedCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Dízimo", "Oferta", "Missões", "Ação social", "Construção", "Outra"
+    };
+
+    private static readonly HashSet<string> AllowedPaymentMethods = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PIX", "Dinheiro", "Transferência bancária"
+    };
+
     private int? CurrentChurchId => int.TryParse(User.FindFirstValue("church_id"), out var id) ? id : null;
     private int? CurrentUserId => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
-    private bool IsAdmin => string.Equals(User.FindFirstValue(ClaimTypes.Role), "Administrador", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(User.FindFirstValue(ClaimTypes.Role), "Igreja", StringComparison.OrdinalIgnoreCase);
+    private bool IsAdmin =>
+        string.Equals(User.FindFirstValue(ClaimTypes.Role), "Administrador", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Lista doações da igreja. Administradores visualizam todas; membros visualizam as suas próprias.
+    /// Administradores visualizam as contribuições da igreja; membros visualizam somente as próprias.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetDonations([FromQuery] string? status, CancellationToken cancellationToken)
@@ -37,11 +48,9 @@ public sealed class DonationsController(AppDbContext db, IChurchNotificationServ
         }
 
         if (!string.IsNullOrWhiteSpace(status))
-        {
-            query = query.Where(d => d.Status == status);
-        }
+            query = query.Where(d => d.Status == status.Trim());
 
-        var list = await query
+        var donations = await query
             .OrderByDescending(d => d.DonationDate)
             .Select(d => new DonationResponse(
                 d.Id,
@@ -49,26 +58,23 @@ public sealed class DonationsController(AppDbContext db, IChurchNotificationServ
                 d.DonorName,
                 d.Amount,
                 d.Category,
+                d.PaymentMethod,
                 d.ReceiptUrl,
                 d.QrCode,
                 d.Status,
-                d.DonationDate
-            ))
+                d.DonationDate))
             .ToListAsync(cancellationToken);
 
-        return Ok(list);
+        return Ok(donations);
     }
 
-    /// <summary>
-    /// Consulta as doações do usuário autenticado (compatibilidade funcional com Felippe /api/doacao/usuario/{idUsuario}).
-    /// </summary>
     [HttpGet("my")]
     public async Task<IActionResult> GetMyDonations(CancellationToken cancellationToken)
     {
         if (CurrentChurchId is not int churchId || CurrentUserId is not int userId)
             return Unauthorized();
 
-        var list = await db.Donations.AsNoTracking()
+        var donations = await db.Donations.AsNoTracking()
             .Where(d => d.ChurchId == churchId && d.UserId == userId)
             .OrderByDescending(d => d.DonationDate)
             .Select(d => new DonationResponse(
@@ -77,37 +83,44 @@ public sealed class DonationsController(AppDbContext db, IChurchNotificationServ
                 d.DonorName,
                 d.Amount,
                 d.Category,
+                d.PaymentMethod,
                 d.ReceiptUrl,
                 d.QrCode,
                 d.Status,
-                d.DonationDate
-            ))
+                d.DonationDate))
             .ToListAsync(cancellationToken);
 
-        return Ok(list);
+        return Ok(donations);
     }
 
     /// <summary>
-    /// Registra uma nova doação (Dízimo, Oferta, etc.).
+    /// Registra a intenção de contribuição. O valor não entra no caixa até a confirmação administrativa.
     /// </summary>
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateDonationRequest request, CancellationToken cancellationToken)
     {
-        if (CurrentChurchId is not int churchId) return Unauthorized();
+        if (CurrentChurchId is not int churchId || CurrentUserId is not int userId)
+            return Unauthorized();
 
-        var userName = User.FindFirstValue(ClaimTypes.Name) ?? "Doador Anônimo";
-        var donor = !string.IsNullOrWhiteSpace(request.DonorName) ? request.DonorName.Trim() : userName;
+        var category = AllowedCategories.FirstOrDefault(x =>
+            x.Equals(request.Category?.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (category is null)
+            return BadRequest(new { message = "Selecione uma finalidade de contribuição válida." });
+
+        var paymentMethod = AllowedPaymentMethods.FirstOrDefault(x =>
+            x.Equals(request.PaymentMethod?.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (paymentMethod is null)
+            return BadRequest(new { message = "Selecione uma forma de contribuição válida." });
 
         var donation = new Donation
         {
             ChurchId = churchId,
-            UserId = CurrentUserId > 0 ? CurrentUserId : null,
-            DonorName = donor,
+            UserId = userId,
+            DonorName = User.FindFirstValue(ClaimTypes.Name) ?? "Membro",
             Amount = request.Amount,
-            Category = string.IsNullOrWhiteSpace(request.Category) ? "Dízimo" : request.Category.Trim(),
-            ReceiptUrl = request.ReceiptUrl?.Trim(),
-            QrCode = request.QrCode?.Trim(),
-            Status = "Confirmada", // Integração direta
+            Category = category,
+            PaymentMethod = paymentMethod,
+            Status = "Pendente",
             DonationDate = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
@@ -116,39 +129,117 @@ public sealed class DonationsController(AppDbContext db, IChurchNotificationServ
         if (ChurchEntityValidator.Validate(donation) is { } error)
             return BadRequest(new { message = error });
 
-        // Cria automaticamente a movimentação financeira correspondente para não duplicar dados
-        var transaction = new FinanceTransaction
+        db.Donations.Add(donation);
+        await db.SaveChangesAsync(cancellationToken);
+
+        await notificationService.NotifyEntityChangedAsync(churchId, "donations", "created", donation);
+
+        return CreatedAtAction(nameof(GetMyDonations), null, ToResponse(donation));
+    }
+
+    /// <summary>
+    /// Confirma o recebimento e cria uma única entrada financeira vinculada à contribuição.
+    /// </summary>
+    [HttpPost("{id:int}/confirm")]
+    public async Task<IActionResult> Confirm(int id, CancellationToken cancellationToken)
+    {
+        if (!IsAdmin) return Forbid();
+        if (CurrentChurchId is not int churchId) return Unauthorized();
+
+        await using var dbTransaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable, cancellationToken);
+
+        var donation = await db.Donations.SingleOrDefaultAsync(
+            d => d.Id == id && d.ChurchId == churchId, cancellationToken);
+        if (donation is null) return NotFound();
+
+        var existingTransaction = await db.Transactions.SingleOrDefaultAsync(
+            t => t.DonationId == donation.Id && t.ChurchId == churchId, cancellationToken);
+
+        if (existingTransaction is not null)
+        {
+            if (!string.Equals(donation.Status, "Confirmada", StringComparison.OrdinalIgnoreCase))
+            {
+                donation.Status = "Confirmada";
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
+            await dbTransaction.CommitAsync(cancellationToken);
+            return Ok(ToResponse(donation));
+        }
+
+        if (!string.Equals(donation.Status, "Pendente", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Somente contribuições pendentes podem ser confirmadas." });
+
+        donation.Status = "Confirmada";
+
+        db.Transactions.Add(new FinanceTransaction
         {
             ChurchId = churchId,
             Description = $"{donation.Category} de {donation.DonorName}",
             Category = donation.Category,
             Amount = donation.Amount,
             TransactionType = "Income",
-            TransactionDate = donation.DonationDate,
-            Method = "PIX",
+            TransactionDate = DateTime.UtcNow,
+            Method = donation.PaymentMethod,
+            DonationId = donation.Id,
             CreatedAt = DateTime.UtcNow
-        };
+        });
 
-        db.Donations.Add(donation);
-        db.Transactions.Add(transaction);
         await db.SaveChangesAsync(cancellationToken);
+        await dbTransaction.CommitAsync(cancellationToken);
 
-        transaction.DonationId = donation.Id;
-        await db.SaveChangesAsync(cancellationToken);
-
-        await notificationService.NotifyEntityChangedAsync(churchId, "donations", "created", donation);
-        await notificationService.NotifyEntityChangedAsync(churchId, "transactions", "created", transaction, adminOnly: true);
-
-        return CreatedAtAction(nameof(GetDonations), new { id = donation.Id }, new DonationResponse(
-            donation.Id,
-            donation.UserId,
-            donation.DonorName,
+        await notificationService.NotifyEntityChangedAsync(churchId, "donations", "updated", donation);
+        await notificationService.NotifyEntityChangedAsync(churchId, "transactions", "created", new
+        {
+            donationId = donation.Id,
             donation.Amount,
-            donation.Category,
-            donation.ReceiptUrl,
-            donation.QrCode,
-            donation.Status,
-            donation.DonationDate
-        ));
+            donation.Category
+        }, adminOnly: true);
+
+        return Ok(ToResponse(donation));
     }
+
+    /// <summary>
+    /// Recusa uma intenção pendente sem gerar movimentação financeira.
+    /// </summary>
+    [HttpPost("{id:int}/reject")]
+    public async Task<IActionResult> Reject(int id, CancellationToken cancellationToken)
+    {
+        if (!IsAdmin) return Forbid();
+        if (CurrentChurchId is not int churchId) return Unauthorized();
+
+        var donation = await db.Donations.SingleOrDefaultAsync(
+            d => d.Id == id && d.ChurchId == churchId, cancellationToken);
+        if (donation is null) return NotFound();
+
+        var alreadyReceived = await db.Transactions.AnyAsync(
+            t => t.DonationId == donation.Id && t.ChurchId == churchId, cancellationToken);
+        if (alreadyReceived || string.Equals(donation.Status, "Confirmada", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Uma contribuição recebida não pode ser recusada." });
+
+        if (string.Equals(donation.Status, "Recusada", StringComparison.OrdinalIgnoreCase))
+            return Ok(ToResponse(donation));
+
+        if (!string.Equals(donation.Status, "Pendente", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Somente contribuições pendentes podem ser recusadas." });
+
+        donation.Status = "Recusada";
+        await db.SaveChangesAsync(cancellationToken);
+        await notificationService.NotifyEntityChangedAsync(churchId, "donations", "updated", donation);
+
+        return Ok(ToResponse(donation));
+    }
+
+    private static DonationResponse ToResponse(Donation donation) => new(
+        donation.Id,
+        donation.UserId,
+        donation.DonorName,
+        donation.Amount,
+        donation.Category,
+        donation.PaymentMethod,
+        donation.ReceiptUrl,
+        donation.QrCode,
+        donation.Status,
+        donation.DonationDate);
 }

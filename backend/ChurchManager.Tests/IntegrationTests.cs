@@ -260,6 +260,7 @@ public class IntegrationTests(CustomWebApplicationFactory factory) : IClassFixtu
             "Igreja Alpha", null, churchAEmail, "SenhaIgrejaA@2026", null, null, null));
         Assert.Equal(HttpStatusCode.OK, churchARes.StatusCode);
         var sessionA = await churchARes.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(sessionA);
 
         // 2. Cria Igreja B
         var churchBEmail = $"igrejaB_{Guid.NewGuid()}@teste.com";
@@ -267,29 +268,67 @@ public class IntegrationTests(CustomWebApplicationFactory factory) : IClassFixtu
             "Igreja Beta", null, churchBEmail, "SenhaIgrejaB@2026", null, null, null));
         Assert.Equal(HttpStatusCode.OK, churchBRes.StatusCode);
         var sessionB = await churchBRes.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(sessionB);
 
-        // 3. Cadastra membro na Igreja A
+        // 3. Provisiona um administrador real para cada igreja pelo fluxo institucional inicial.
+        var adminAEmail = $"admin_a_{Guid.NewGuid()}@teste.com";
+        var passwordA = "SenhaAdminA@2026";
+        var memberAResponse = await _client.PostAsJsonAsync("/api/auth/register-member", new MemberRegisterRequest(
+            "Administrador Alpha", adminAEmail, passwordA, sessionA.ChurchId, null, null));
+        Assert.Equal(HttpStatusCode.OK, memberAResponse.StatusCode);
+
+        var adminBEmail = $"admin_b_{Guid.NewGuid()}@teste.com";
+        var passwordB = "SenhaAdminB@2026";
+        var memberBResponse = await _client.PostAsJsonAsync("/api/auth/register-member", new MemberRegisterRequest(
+            "Administrador Beta", adminBEmail, passwordB, sessionB.ChurchId, null, null));
+        Assert.Equal(HttpStatusCode.OK, memberBResponse.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var memberA = await db.Members.FirstAsync(m => m.Email == adminAEmail);
+        var memberB = await db.Members.FirstAsync(m => m.Email == adminBEmail);
+
+        var institutionalA = factory.CreateClient();
+        institutionalA.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sessionA.Token);
+        var promoteA = await institutionalA.PostAsJsonAsync("/api/church/settings/promote-admin", new PromoteAdminRequest(memberA.Id));
+        Assert.Equal(HttpStatusCode.OK, promoteA.StatusCode);
+
+        var institutionalB = factory.CreateClient();
+        institutionalB.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sessionB.Token);
+        var promoteB = await institutionalB.PostAsJsonAsync("/api/church/settings/promote-admin", new PromoteAdminRequest(memberB.Id));
+        Assert.Equal(HttpStatusCode.OK, promoteB.StatusCode);
+
+        var loginA = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest(adminAEmail, passwordA, AccessMode: "admin"));
+        var loginB = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest(adminBEmail, passwordB, AccessMode: "admin"));
+        Assert.Equal(HttpStatusCode.OK, loginA.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, loginB.StatusCode);
+
+        var adminSessionA = await loginA.Content.ReadFromJsonAsync<AuthResponse>();
+        var adminSessionB = await loginB.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(adminSessionA);
+        Assert.NotNull(adminSessionB);
+
+        // 4. Administrador A cria um membro operacional da Igreja A.
         var clientA = factory.CreateClient();
-        clientA.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sessionA!.Token);
-        var memberA = new Member
+        clientA.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminSessionA.Token);
+        var memberToCreate = new Member
         {
             Name = "Membro Exclusivo da Igreja Alpha",
             Email = $"alpha_{Guid.NewGuid()}@teste.com",
             Status = "Ativo",
             Role = "Membro"
         };
-        var createRes = await clientA.PostAsJsonAsync("/api/members", memberA);
+        var createRes = await clientA.PostAsJsonAsync("/api/members", memberToCreate);
         Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
 
-        // 4. Igreja B consulta a lista de membros
+        // 5. Administrador B consulta a lista e não recebe dados da Igreja A.
         var clientB = factory.CreateClient();
-        clientB.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sessionB!.Token);
+        clientB.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminSessionB.Token);
         var listBRes = await clientB.GetAsync("/api/members");
         Assert.Equal(HttpStatusCode.OK, listBRes.StatusCode);
 
         var membersB = await listBRes.Content.ReadFromJsonAsync<List<Member>>();
         Assert.NotNull(membersB);
-        // O membro da Igreja A NÃO pode aparecer na Igreja B!
         Assert.DoesNotContain(membersB, m => m.Name == "Membro Exclusivo da Igreja Alpha");
     }
 
@@ -311,14 +350,25 @@ public class IntegrationTests(CustomWebApplicationFactory factory) : IClassFixtu
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var member = await db.Members.FirstAsync(m => m.Email == memberEmail);
 
-        var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
-        await client.PostAsJsonAsync("/api/church/settings/promote-admin", new PromoteAdminRequest(member.Id));
+        var institutionalClient = factory.CreateClient();
+        institutionalClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
+        var promoteRes = await institutionalClient.PostAsJsonAsync(
+            "/api/church/settings/promote-admin",
+            new PromoteAdminRequest(member.Id));
+        Assert.Equal(HttpStatusCode.OK, promoteRes.StatusCode);
 
         var user = await db.Users.FirstAsync(u => u.Email == memberEmail);
+        var adminLogin = await _client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest(memberEmail, "SenhaAdmin@2026", AccessMode: "admin"));
+        Assert.Equal(HttpStatusCode.OK, adminLogin.StatusCode);
+        var adminSession = await adminLogin.Content.ReadFromJsonAsync<AuthResponse>();
 
-        // Tenta remover o ÚNICO administrador ativo
-        var demoteRes = await client.PostAsJsonAsync("/api/church/settings/demote-admin", new DemoteAdminRequest(user.Id));
+        var adminClient = factory.CreateClient();
+        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminSession!.Token);
+
+        // Tenta remover o ÚNICO administrador ativo usando a sessão de administrador.
+        var demoteRes = await adminClient.PostAsJsonAsync("/api/church/settings/demote-admin", new DemoteAdminRequest(user.Id));
         // Deve retornar BadRequest impedindo deixar a igreja sem administradores!
         Assert.Equal(HttpStatusCode.BadRequest, demoteRes.StatusCode);
     }
@@ -352,9 +402,27 @@ public class IntegrationTests(CustomWebApplicationFactory factory) : IClassFixtu
         Assert.NotNull(myDonations);
         Assert.Contains(myDonations, d => d.Amount == 250.00m && d.Category == "Dízimo");
 
-        // Administrador verifica resumo financeiro da igreja com a transação gerada
+        // Provisiona o administrador pelo fluxo institucional, sem usar a identidade da igreja como administrador.
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var donorMember = await db.Members.FirstAsync(m => m.Email == memberEmail);
+
+        var institutionalClient = factory.CreateClient();
+        institutionalClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
+        var promoteResponse = await institutionalClient.PostAsJsonAsync(
+            "/api/church/settings/promote-admin",
+            new PromoteAdminRequest(donorMember.Id));
+        Assert.Equal(HttpStatusCode.OK, promoteResponse.StatusCode);
+
+        var adminLogin = await _client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest(memberEmail, "SenhaDoador@2026", AccessMode: "admin"));
+        Assert.Equal(HttpStatusCode.OK, adminLogin.StatusCode);
+        var adminSession = await adminLogin.Content.ReadFromJsonAsync<AuthResponse>();
+
+        // Administrador verifica resumo financeiro da própria igreja.
         var adminClient = factory.CreateClient();
-        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
+        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminSession!.Token);
         var summaryRes = await adminClient.GetAsync("/api/transactions/summary");
         Assert.Equal(HttpStatusCode.OK, summaryRes.StatusCode);
     }

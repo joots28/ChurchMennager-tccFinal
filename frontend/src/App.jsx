@@ -6,6 +6,7 @@ import Auth from './features/auth/Auth.jsx';
 import MemberPortal from './features/member/MemberPortal.jsx';
 import ManagementFields from './features/management/ManagementFields.jsx';
 import AdminLayout from './components/layout/AdminLayout.jsx';
+import ChurchInstitutionalPortal from './features/church/ChurchInstitutionalPortal.jsx';
 
 export default function App() {
   const {
@@ -43,6 +44,19 @@ export default function App() {
 
   if (!user) {
     return <Auth onLogin={login} onRegister={register} theme={theme} onToggleTheme={toggleTheme} initialNotice={toast} />;
+  }
+
+  if (user.role === 'Igreja') {
+    return (
+      <ChurchInstitutionalPortal
+        user={user}
+        data={data}
+        onLogout={logout}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        tell={tell}
+      />
+    );
   }
 
   if (humanRole(user.role) === 'Membro') {

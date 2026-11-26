@@ -419,6 +419,13 @@ namespace ChurchManager.Api.Migrations
                         .HasColumnType("character varying(160)")
                         .HasDefaultValue("");
 
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("PIX");
+
                     b.Property<string>("QrCode")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -539,7 +546,9 @@ namespace ChurchManager.Api.Migrations
 
                     b.HasIndex("ChurchId");
 
-                    b.HasIndex("DonationId");
+                    b.HasIndex("DonationId")
+                        .IsUnique()
+                        .HasFilter("\"DonationId\" IS NOT NULL");
 
                     b.HasIndex("ChurchId", "TransactionDate");
 
