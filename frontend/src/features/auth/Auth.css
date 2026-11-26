@@ -200,7 +200,7 @@
   line-height: 1.45;
 }
 
-body[data-theme="dark"] .auth-demo-hint {
+html[data-theme="dark"] .auth-demo-hint {
   background: #172554;
   border-color: #1d4ed8;
   color: #dbeafe;
@@ -317,31 +317,31 @@ body[data-theme="dark"] .auth-demo-hint {
   color: #1e40af;
 }
 
-body[data-theme="dark"] .auth-portals {
+html[data-theme="dark"] .auth-portals {
   background: #1e293b;
 }
 
-body[data-theme="dark"] .auth-portals button {
+html[data-theme="dark"] .auth-portals button {
   color: #cbd5e1;
 }
 
-body[data-theme="dark"] .auth-portals button.active {
+html[data-theme="dark"] .auth-portals button.active {
   background: #334155;
   color: #bfdbfe;
 }
 
-body[data-theme="dark"] .auth-select-field label {
+html[data-theme="dark"] .auth-select-field label {
   color: #cbd5e1;
 }
 
-body[data-theme="dark"] .auth-select-field input,
-body[data-theme="dark"] .auth-select-field select {
+html[data-theme="dark"] .auth-select-field input,
+html[data-theme="dark"] .auth-select-field select {
   background: #0f172a;
   color: #f8fafc;
   border-color: #334155;
 }
 
-body[data-theme="dark"] .auth-access-note {
+html[data-theme="dark"] .auth-access-note {
   background: #172554;
   border-color: #1d4ed8;
   color: #dbeafe;

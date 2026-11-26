@@ -215,3 +215,136 @@ html[data-theme="dark"] .settings-submit .btn,
 html[data-theme="dark"] .auth-submit .btn {
   color: #ffffff;
 }
+
+
+/* Complementos do tema escuro: mantém superfícies, textos e estados consistentes
+   nos portais administrativo, institucional e do membro. */
+html[data-theme="dark"] {
+  --page-bg: #0b1120;
+  --surface: #111827;
+  --text-primary: #e5e7eb;
+  --text-secondary: #a7b3c5;
+}
+
+html[data-theme="dark"] .institution-page {
+  background: var(--page-bg);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .institution-header,
+html[data-theme="dark"] .institution-card {
+  color: var(--text-primary);
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .institution-card-heading,
+html[data-theme="dark"] .institution-member-row,
+html[data-theme="dark"] .institution-admin-row {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .institution-heading p,
+html[data-theme="dark"] .institution-card-heading p,
+html[data-theme="dark"] .institution-member-row span,
+html[data-theme="dark"] .institution-admin-row span,
+html[data-theme="dark"] .institution-empty,
+html[data-theme="dark"] .institution-help,
+html[data-theme="dark"] .institution-footnote {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .institution-status.pending {
+  color: #fed7aa;
+  background: #431407;
+}
+
+html[data-theme="dark"] .institution-status.complete {
+  color: #a7f3d0;
+  background: #064e3b;
+}
+
+html[data-theme="dark"] .welcome-date {
+  color: #cbd5e1;
+  background: #172033;
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .welcome-strip p,
+html[data-theme="dark"] .metric-heading,
+html[data-theme="dark"] .recent-info span,
+html[data-theme="dark"] .panel-heading p,
+html[data-theme="dark"] .calendar-summary p,
+html[data-theme="dark"] .member-feature-grid article span,
+html[data-theme="dark"] .member-feature-grid article small,
+html[data-theme="dark"] .member-top-right {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .panel-heading,
+html[data-theme="dark"] .recent-row,
+html[data-theme="dark"] .access-row,
+html[data-theme="dark"] .access-section-heading {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .access-row strong,
+html[data-theme="dark"] .access-section-heading h3 {
+  color: #e5e7eb;
+}
+
+html[data-theme="dark"] .access-row span,
+html[data-theme="dark"] .access-row small,
+html[data-theme="dark"] .access-empty,
+html[data-theme="dark"] .access-section-heading p {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .calendar-illustration,
+html[data-theme="dark"] .calendar-count,
+html[data-theme="dark"] .metric-icon {
+  color: #bfdbfe;
+  background: #172554;
+}
+
+html[data-theme="dark"] .transaction-symbol.income {
+  color: #86efac;
+  background: #052e16;
+}
+
+html[data-theme="dark"] .transaction-symbol.expense {
+  color: #fca5a5;
+  background: #450a0a;
+}
+
+html[data-theme="dark"] .member-donation h2 {
+  color: #bfdbfe;
+}
+
+html[data-theme="dark"] .member-donation p {
+  color: #93c5fd;
+}
+
+html[data-theme="dark"] .security-note {
+  color: #bfdbfe;
+  background: #172554;
+  border-color: #1e40af;
+}
+
+html[data-theme="dark"] .security-note p {
+  color: #cbd5e1;
+}
+
+html[data-theme="dark"] .mode-tag.demo {
+  color: #bfdbfe;
+  background: #172554;
+}
+
+html[data-theme="dark"] .mode-tag.live {
+  color: #86efac;
+  background: #052e25;
+}
+
+html[data-theme="dark"] .link-button {
+  color: #93c5fd;
+}
