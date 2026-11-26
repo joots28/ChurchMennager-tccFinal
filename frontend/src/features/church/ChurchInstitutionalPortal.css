@@ -173,3 +173,43 @@
     width: 100%;
   }
 }
+
+
+.institution-admin-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: none;
+}
+
+.institution-admin-actions .btn {
+  white-space: nowrap;
+}
+
+.institution-error {
+  margin: 0 0 18px;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+.institution-promote-card {
+  margin-top: 18px;
+}
+
+.institution-admin-row > .institution-admin-actions {
+  display: flex;
+  flex-direction: row;
+}
+
+@media (max-width: 600px) {
+  .institution-admin-actions {
+    width: 100%;
+  }
+
+  .institution-admin-actions .btn {
+    flex: 1;
+    white-space: normal;
+  }
+}

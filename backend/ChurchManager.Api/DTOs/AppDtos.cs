@@ -86,9 +86,15 @@ public sealed record AdminUserResponse(
     int? MemberId,
     string Name,
     string Email,
+    string Phone,
     string Role,
     bool IsActive,
     DateTime CreatedAt);
+
+public sealed record UpdateAdminRequest(
+    [param: Required, StringLength(160, MinimumLength = 2)] string Name,
+    [param: Required, EmailAddress, StringLength(254)] string Email,
+    [param: StringLength(40)] string? Phone);
 
 #endregion
 

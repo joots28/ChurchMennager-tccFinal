@@ -4,6 +4,7 @@ import Button from '../../components/ui/Button.jsx';
 import MetricCard from '../../components/ui/MetricCard.jsx';
 import { api } from '../../services/httpClient.js';
 import { apiResource } from '../../services/resourceService.js';
+import { subscribeToUpdates } from '../../services/index.js';
 import { currency, dateBR } from '../../utils/formatters.js';
 import ResourceTablePage from '../management/ResourceTablePage.jsx';
 import './FinancePage.css';
@@ -64,6 +65,15 @@ export default function FinancePage({ data, setData, meta, filtered, edit, remov
 
   useEffect(() => {
     refreshDonations();
+    if (demo) return undefined;
+
+    const unsubscribe = subscribeToUpdates(payload => {
+      if (String(payload?.resource || '').toLowerCase() === 'donations') {
+        refreshDonations();
+      }
+    });
+
+    return unsubscribe;
   }, [demo]);
 
   async function resolveDonation(donation, action) {

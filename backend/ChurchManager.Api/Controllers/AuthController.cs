@@ -19,6 +19,7 @@ public sealed class AuthController(
     IPasswordHasher<AppUser> userHasher,
     IPasswordHasher<Church> churchHasher,
     ITokenService tokenService,
+    IChurchNotificationService notificationService,
     ILogger<AuthController> logger) : ControllerBase
 {
     /// <summary>
@@ -189,9 +190,12 @@ public sealed class AuthController(
 
             // Cria o registro correspondente em Members para constar na lista da igreja
             var existingMember = await db.Members.FirstOrDefaultAsync(m => m.ChurchId == church.Id && m.Email == email, cancellationToken);
+            Member registeredMember;
+            var memberAction = "created";
+
             if (existingMember is null)
             {
-                var member = new Member
+                registeredMember = new Member
                 {
                     ChurchId = church.Id,
                     UserId = user.Id,
@@ -203,13 +207,17 @@ public sealed class AuthController(
                     Status = "Ativo",
                     CreatedAt = DateTime.UtcNow
                 };
-                db.Members.Add(member);
+                db.Members.Add(registeredMember);
             }
             else
             {
-                existingMember.UserId = user.Id;
-                existingMember.Name = name;
-                if (!string.IsNullOrWhiteSpace(phone)) existingMember.Phone = phone;
+                registeredMember = existingMember;
+                memberAction = "updated";
+                registeredMember.UserId = user.Id;
+                registeredMember.Name = name;
+                registeredMember.Email = email;
+                if (!string.IsNullOrWhiteSpace(phone)) registeredMember.Phone = phone;
+                if (!string.IsNullOrWhiteSpace(ministry)) registeredMember.Ministry = ministry;
             }
 
             if (defaultRole != null)
@@ -219,6 +227,13 @@ public sealed class AuthController(
 
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+
+            await notificationService.NotifyEntityChangedAsync(church.Id, "members", memberAction, new
+            {
+                id = registeredMember.Id,
+                name = registeredMember.Name,
+                email = registeredMember.Email
+            });
 
             var token = tokenService.GenerateToken(
                 user.Id,
