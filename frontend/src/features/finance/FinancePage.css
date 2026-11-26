@@ -46,3 +46,102 @@
     font-size: 21px;
   }
 }
+
+
+.finance-donations-panel {
+  margin-bottom: 18px;
+}
+
+.finance-donations-list {
+  padding: 2px 20px;
+}
+
+.finance-donation-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.finance-donation-row:last-child {
+  border-bottom: 0;
+}
+
+.finance-donation-info,
+.finance-donation-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.finance-donation-info strong,
+.finance-donation-actions>strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.finance-donation-info small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.finance-donation-actions {
+  align-items: flex-end;
+  flex: none;
+}
+
+.finance-donation-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.finance-donations-empty {
+  padding: 14px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+html[data-theme="dark"] .finance-donation-row {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .finance-donation-info strong,
+html[data-theme="dark"] .finance-donation-actions>strong {
+  color: #e5e7eb;
+}
+
+html[data-theme="dark"] .finance-donation-info small,
+html[data-theme="dark"] .finance-donations-empty {
+  color: #a7b3c5;
+}
+
+@media (max-width: 680px) {
+  .finance-donations-list {
+    padding: 0 13px;
+  }
+
+  .finance-donation-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .finance-donation-actions {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .finance-donation-buttons {
+    justify-content: flex-start;
+  }
+
+  .finance-donation-buttons .btn {
+    flex: 1;
+  }
+}

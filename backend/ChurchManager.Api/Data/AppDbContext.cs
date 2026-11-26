@@ -166,6 +166,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
             entity.HasIndex(x => x.ChurchId);
             entity.HasIndex(x => new { x.ChurchId, x.TransactionDate });
+            entity.HasIndex(x => x.DonationId).IsUnique().HasFilter("\"DonationId\" IS NOT NULL");
             entity.HasOne<Church>().WithMany(c => c.Transactions).HasForeignKey(x => x.ChurchId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Donation).WithMany().HasForeignKey(x => x.DonationId).OnDelete(DeleteBehavior.SetNull);
         });
@@ -177,6 +178,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.DonorName).HasMaxLength(160).HasDefaultValue("");
             entity.Property(x => x.Amount).HasPrecision(10, 2);
             entity.Property(x => x.Category).HasMaxLength(50).HasDefaultValue("Dízimo");
+            entity.Property(x => x.PaymentMethod).HasMaxLength(30).HasDefaultValue("PIX");
             entity.Property(x => x.ReceiptUrl).HasMaxLength(500);
             entity.Property(x => x.QrCode).HasMaxLength(500);
             entity.Property(x => x.Status).HasMaxLength(50).HasDefaultValue("Pendente");
