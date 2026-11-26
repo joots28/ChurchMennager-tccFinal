@@ -1,0 +1,136 @@
+.admins-management-panel {
+  margin-top: 18px;
+  overflow: hidden;
+}
+
+.admins-promote-box {
+  margin: 0 20px 16px;
+  padding: 16px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--surface-subtle, #f8fafc);
+}
+
+.admins-promote-box form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.admins-promote-box select,
+.admin-edit-form select {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: var(--text, #0f172a);
+  font: inherit;
+}
+
+.admins-management-hint {
+  margin: 10px 0 0;
+  color: var(--text-muted, #64748b);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admins-list {
+  display: grid;
+}
+
+.admin-management-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border, #e2e8f0);
+}
+
+.admin-management-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-management-avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.admin-management-identity div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.admin-management-identity strong,
+.admin-management-identity span,
+.admin-management-identity small {
+  overflow-wrap: anywhere;
+}
+
+.admin-management-identity div span,
+.admin-management-identity small {
+  color: var(--text-muted, #64748b);
+  font-size: 12px;
+}
+
+.admin-management-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: none;
+}
+
+.admins-management-empty {
+  padding: 18px 20px;
+  margin: 0;
+  color: var(--text-muted, #64748b);
+  font-size: 13px;
+}
+
+.admins-management-error {
+  margin: 0 20px 14px;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.admin-edit-form {
+  display: grid;
+  gap: 14px;
+}
+
+@media (max-width: 680px) {
+  .admins-promote-box form {
+    grid-template-columns: 1fr;
+  }
+
+  .admins-promote-box form .btn {
+    width: 100%;
+  }
+
+  .admin-management-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-management-actions {
+    width: 100%;
+  }
+
+  .admin-management-actions .btn {
+    flex: 1;
+  }
+}

@@ -6,7 +6,7 @@ const listeners = new Set();
 export function initSignalR(apiUrl, onEntityChanged) {
   if (onEntityChanged) listeners.add(onEntityChanged);
 
-  if (connection && connection.state === signalR.HubConnectionState.Connected) {
+  if (connection && connection.state !== signalR.HubConnectionState.Disconnected) {
     return connection;
   }
 

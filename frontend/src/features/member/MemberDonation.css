@@ -20,8 +20,38 @@
 
 .member-donation p {
   font-size: 12px;
+  line-height: 1.5;
   color: #1d4ed8;
   margin: 0;
+}
+
+.donation-form {
+  display: grid;
+  gap: 14px;
+}
+
+.donation-form select {
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: var(--text, #0f172a);
+  font: inherit;
+}
+
+.donation-form-note {
+  margin: 0;
+  color: var(--text-muted, #64748b);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.donation-form-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 13px;
 }
 
 @media (max-width:800px) {

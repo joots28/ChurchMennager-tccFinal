@@ -38,7 +38,9 @@ export default function App() {
     changeForm,
     tell,
     meta,
-    humanRole
+    humanRole,
+    submitDonation,
+    updateDonationStatus
   } = useChurchManager();
 
   if (!user) {
@@ -53,7 +55,7 @@ export default function App() {
         onLogout={logout}
         theme={theme}
         onToggleTheme={toggleTheme}
-        onDonate={() => tell('A contribuição real não está conectada nesta demonstração. Nenhum pagamento foi feito.')}
+        onDonate={submitDonation}
       />
     );
   }
@@ -81,6 +83,7 @@ export default function App() {
         edit={edit}
         remove={remove}
         exportCsv={exportCsv}
+        onDonationStatusChange={updateDonationStatus}
       />
 
       {dialog && (

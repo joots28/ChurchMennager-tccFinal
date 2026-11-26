@@ -9,7 +9,8 @@ import './Auth.css';
 
 export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initialNotice = '' }) {
   const memberPortal = window.location.pathname.startsWith('/membro');
-  const portal = memberPortal ? 'member' : 'admin';
+  const churchPortal = window.location.pathname.startsWith('/igreja');
+  const portal = memberPortal ? 'member' : churchPortal ? 'church' : 'admin';
   const [screen, setScreen] = useState('login');
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
@@ -51,14 +52,16 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
     ? 'Recuperar senha'
     : isRegister
       ? step === 1 ? 'Criar conta administrativa' : 'Cadastrar igreja'
-      : memberPortal ? 'Portal do Membro' : 'Acesso Administrativo';
+      : memberPortal ? 'Portal do Membro' : churchPortal ? 'Acesso da Igreja' : 'Acesso Administrativo';
   const subtitle = screen === 'recover'
     ? 'Entre em contato com a administração para recuperar seu acesso.'
     : isRegister
       ? step === 1 ? 'Crie a conta responsável pela sua igreja.' : 'Informe os dados da instituição.'
       : memberPortal
         ? 'Acesse eventos, escalas e informações da sua comunidade.'
-        : 'Acesse a gestão de membros, ministérios, eventos e finanças.';
+        : churchPortal
+          ? 'Gerencie os dados institucionais e os administradores da sua igreja.'
+          : 'Acesse a gestão de membros, ministérios, eventos e finanças.';
 
   return (
     <main className="auth-page">
@@ -67,7 +70,8 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
           <ThemeToggle theme={theme} onToggle={onToggleTheme} className="auth-theme-toggle" />
           <div className="auth-brand"><Brand /></div>
           <nav className="auth-portals" aria-label="Tipo de acesso">
-            <a href="/admin/login" className={!memberPortal ? 'active' : ''}>Administrador</a>
+            <a href="/admin/login" className={!memberPortal && !churchPortal ? 'active' : ''}>Administrador</a>
+            <a href="/igreja/login" className={churchPortal ? 'active' : ''}>Igreja</a>
             <a href="/membro/login" className={memberPortal ? 'active' : ''}>Membro</a>
           </nav>
           {screen === 'recover' && (
@@ -89,7 +93,7 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
               <InputField
                 label={memberPortal && screen === 'login' ? 'E-mail ou usuário cadastrado' : screen === 'login' ? 'Usuário ou e-mail' : 'E-mail'}
                 name="email" value={form.email} onChange={change}
-                placeholder={screen === 'login' ? 'Digite seu usuário ou e-mail' : 'voce@igreja.com'}
+                placeholder={screen === 'login' ? (churchPortal ? 'E-mail institucional ou nome da igreja' : 'Digite seu usuário ou e-mail') : 'voce@igreja.com'}
                 type={screen === 'login' ? 'text' : 'email'} icon={screen === 'login' ? 'user' : 'mail'}
                 maxLength={254} autoComplete={screen === 'login' ? 'username' : 'email'} required
               />

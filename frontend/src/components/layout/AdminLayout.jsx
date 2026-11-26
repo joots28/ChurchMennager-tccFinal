@@ -7,7 +7,7 @@ import './AdminLayout.css';
 export default function AdminLayout({
   user, logout, data, setData, module, setModule, query, setQuery,
   mobileNav, setMobileNav, theme, toggleTheme, demo, meta,
-  handleAction, filtered, tell, edit, remove, exportCsv
+  handleAction, filtered, tell, edit, remove, exportCsv, onDonationStatusChange
 }) {
   const actionLabels = {
     events: 'Criar evento',
@@ -46,6 +46,7 @@ export default function AdminLayout({
           {module === 'settings' && <PageHeading title={meta[0]} subtitle={meta[1]} />}
           <PageRenderer
             module={module}
+            user={user}
             data={data}
             setData={setData}
             filtered={filtered}
@@ -56,6 +57,7 @@ export default function AdminLayout({
             edit={edit}
             remove={remove}
             exportCsv={exportCsv}
+            onDonationStatusChange={onDonationStatusChange}
           />
         </div>
       </main>

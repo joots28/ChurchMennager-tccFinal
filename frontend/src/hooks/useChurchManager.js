@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { loadDemoData, saveDemoData } from '../services/demoStorage.js';
-import { api, apiLogin, apiResource, DEMO_MODE } from '../services/index.js';
+import { api, API_URL, apiLogin, apiResource, DEMO_MODE } from '../services/index.js';
+import { initSignalR, subscribeToUpdates, stopSignalR } from '../services/signalrService.js';
 import { moduleMeta } from '../config/navigation.js';
 import { humanRole } from '../utils/appHelpers.js';
 import useTheme from './useTheme.js';
@@ -9,7 +10,7 @@ import { clearSession, readSession, saveSession } from '../utils/sessionStore.js
 import { authenticateDemo } from '../services/demoAuthService.js';
 
 const emptyData = () => ({
-  members: [], ministries: [], events: [], transactions: [], roles: [], scales: [],
+  members: [], ministries: [], events: [], transactions: [], donations: [], roles: [], scales: [],
   settings: { churchName: '', email: '', phone: '', address: '', timezone: 'America/Sao_Paulo' }
 });
 
@@ -26,11 +27,13 @@ async function loadRemoteData(role) {
   const names = ['members', 'ministries', 'events', 'transactions', 'roles', 'scales'];
   const loaded = await Promise.all([
     ...names.map(resource => apiResource(resource)),
+    api('/api/donations'),
     api('/api/church/settings')
   ]);
   return {
     ...Object.fromEntries(names.map((resource, index) => [resource, loaded[index] || []])),
-    settings: loaded[6]
+    donations: loaded[6] || [],
+    settings: loaded[7]
   };
 }
 
@@ -56,6 +59,7 @@ export default function useChurchManager() {
     const expireSession = () => {
       loadedRemoteData.current = false;
       clearSession();
+      stopSignalR();
       setUser(null);
       setModule('dashboard');
       setDialog(null);
@@ -90,6 +94,30 @@ export default function useChurchManager() {
   }, [demo, user]);
 
   useEffect(() => {
+    if (demo || !user) return undefined;
+    let active = true;
+
+    const refreshForChurch = async payload => {
+      if (!active || Number(payload?.churchId) !== Number(user.churchId)) return;
+      const resource = String(payload?.resource || '').toLowerCase();
+      if (!['members', 'donations', 'transactions', 'roles', 'settings'].includes(resource)) return;
+      try {
+        const loaded = await loadRemoteData(user.role);
+        if (active) setData(old => ({ ...old, ...loaded, settings: loaded.settings || old.settings }));
+      } catch (error) {
+        console.warn('Não foi possível atualizar os dados em tempo real:', error.message);
+      }
+    };
+
+    const unsubscribe = subscribeToUpdates(refreshForChurch);
+    initSignalR(API_URL);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [demo, user?.id, user?.role, user?.churchId]);
+
+  useEffect(() => {
     if (!toast) return undefined;
     const id = setTimeout(() => setToast(''), 3000);
     return () => clearTimeout(id);
@@ -99,6 +127,7 @@ export default function useChurchManager() {
 
   const logout = () => {
     loadedRemoteData.current = false;
+    stopSignalR();
     setToast('');
     clearSession();
     setUser(null);
@@ -107,13 +136,13 @@ export default function useChurchManager() {
     setData(demo ? loadDemoData() : emptyData());
   };
 
-  async function login(identifier, password) {
+  async function login(identifier, password, accessMode = 'admin') {
     const loginIdentifier = String(identifier || '').trim();
     if (!loginIdentifier || !password) throw new Error('Informe seu usuário e senha.');
 
     const result = demo
       ? { user: authenticateDemo(loginIdentifier, password) }
-      : await apiLogin(loginIdentifier, password);
+      : await apiLogin(loginIdentifier, password, accessMode);
     const next = result.user;
 
     if (!demo) {
@@ -147,9 +176,42 @@ export default function useChurchManager() {
     });
 
     if (result.token) sessionStorage.setItem('churchmanager-token', result.token);
-    const next = { name: result.name, email: result.email, role: result.role || 'Administrador' };
+    const next = {
+      id: result.id,
+      name: result.name,
+      email: result.email,
+      role: result.role || 'Igreja',
+      churchId: result.churchId,
+      churchName: result.churchName,
+      accessMode: result.accessMode || 'church'
+    };
     saveSession(next, false);
     setUser(next);
+  }
+
+  async function submitDonation(values) {
+    if (demo) throw new Error('O envio de contribuições não está disponível na demonstração.');
+    const result = await api('/api/donations', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount: Number(values.amount),
+        category: values.category,
+        receiptUrl: values.receiptUrl || null,
+        donorName: values.donorName || null
+      })
+    });
+    tell('Contribuição enviada. Ela ficará pendente até a conferência da igreja.');
+    return result;
+  }
+
+  async function updateDonationStatus(id, status) {
+    const result = await api(`/api/donations/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    });
+    const loaded = await loadRemoteData(user.role);
+    setData(old => ({ ...old, ...loaded, settings: loaded.settings || old.settings }));
+    tell(result.message || 'Status da contribuição atualizado.');
   }
 
   const {
@@ -166,6 +228,7 @@ export default function useChurchManager() {
     dialog, setDialog, toast, setToast, mobileNav, setMobileNav, saving,
     form, setForm, theme, toggleTheme, demo, login, register, logout,
     filtered, add, edit, remove, saveRecord, changeForm,
-    handleAction, exportCsv, tell, meta, humanRole
+    handleAction, exportCsv, tell, meta, humanRole,
+    submitDonation, updateDonationStatus
   };
 }

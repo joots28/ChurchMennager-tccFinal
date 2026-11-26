@@ -103,6 +103,7 @@ public sealed class ChurchSettingsController(
     [HttpGet("admins")]
     public async Task<IActionResult> GetAdmins(CancellationToken cancellationToken)
     {
+        if (!IsInstitutionalAccount) return Forbid();
         if (CurrentChurchId is not int churchId) return Unauthorized();
 
         var admins = await db.Users.AsNoTracking()
@@ -113,6 +114,7 @@ public sealed class ChurchSettingsController(
                 null,
                 u.Name,
                 u.Email,
+                u.Phone ?? string.Empty,
                 u.Role,
                 u.IsActive,
                 u.CreatedAt
@@ -128,6 +130,7 @@ public sealed class ChurchSettingsController(
     [HttpGet("eligible-members")]
     public async Task<IActionResult> GetEligibleMembers(CancellationToken cancellationToken)
     {
+        if (!IsInstitutionalAccount) return Forbid();
         if (CurrentChurchId is not int churchId) return Unauthorized();
 
         var members = await db.Members.AsNoTracking()
@@ -141,7 +144,7 @@ public sealed class ChurchSettingsController(
                 m.Phone,
                 m.Ministry,
                 m.Role,
-                HasUserAccount = m.UserId.HasValue || db.Users.Any(u => u.ChurchId == churchId && u.Email == m.Email)
+                HasUserAccount = db.Users.Any(u => u.ChurchId == churchId && u.IsActive && ((m.UserId.HasValue && u.Id == m.UserId.Value) || u.Email == m.Email))
             })
             .ToListAsync(cancellationToken);
 
@@ -155,39 +158,24 @@ public sealed class ChurchSettingsController(
     [HttpPost("promote-admin")]
     public async Task<IActionResult> PromoteAdmin([FromBody] PromoteAdminRequest request, CancellationToken cancellationToken)
     {
+        if (!IsInstitutionalAccount) return Forbid();
         if (CurrentChurchId is not int churchId) return Unauthorized();
 
         var member = await db.Members.FirstOrDefaultAsync(m => m.Id == request.MemberId && m.ChurchId == churchId, cancellationToken);
         if (member is null)
             return NotFound(new { message = "Membro não encontrado nesta igreja." });
 
-        // Localiza ou provisiona a conta de usuário (AppUser) do membro
-        var user = await db.Users.FirstOrDefaultAsync(u => u.ChurchId == churchId && (u.Id == member.UserId || u.Email == member.Email), cancellationToken);
+        // A promoção exige uma conta pessoal já cadastrada. Não cria senhas padrão conhecidas.
+        var user = await db.Users.FirstOrDefaultAsync(
+            u => u.ChurchId == churchId &&
+                 u.IsActive &&
+                 ((member.UserId.HasValue && u.Id == member.UserId.Value) || u.Email == member.Email),
+            cancellationToken);
 
         if (user is null)
-        {
-            if (string.IsNullOrWhiteSpace(member.Email))
-                return BadRequest(new { message = "O membro precisa ter um e-mail cadastrado para ter acesso de administrador." });
+            return BadRequest(new { message = "Este membro ainda não possui acesso ativo. Ele precisa concluir o cadastro no Portal do Membro antes da promoção." });
 
-            var adminCargo = await db.Roles.FirstOrDefaultAsync(r => r.ChurchId == churchId && r.Name == "Administrador", cancellationToken);
-
-            user = new AppUser
-            {
-                ChurchId = churchId,
-                CargoId = adminCargo?.Id,
-                Name = member.Name,
-                Email = member.Email,
-                Phone = member.Phone,
-                Role = "Administrador",
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
-            // Senha padrão inicial segura que deve ser alterada pelo usuário
-            user.PasswordHash = userHasher.HashPassword(user, "IgrejaAdmin@2026!");
-            db.Users.Add(user);
-            await db.SaveChangesAsync(cancellationToken);
-            member.UserId = user.Id;
-        }
+        member.UserId = user.Id;
 
         user.Role = "Administrador";
         user.IsActive = true;
@@ -197,7 +185,7 @@ public sealed class ChurchSettingsController(
         if (adminRole != null)
         {
             user.CargoId = adminRole.Id;
-            adminRole.Users = await db.Users.CountAsync(u => u.ChurchId == churchId && u.Role == "Administrador", cancellationToken);
+            adminRole.Users = await db.Users.CountAsync(u => u.ChurchId == churchId && u.CargoId == adminRole.Id, cancellationToken);
         }
 
         // Auditoria obrigatória
@@ -238,6 +226,7 @@ public sealed class ChurchSettingsController(
     [HttpPost("demote-admin")]
     public async Task<IActionResult> DemoteAdmin([FromBody] DemoteAdminRequest request, CancellationToken cancellationToken)
     {
+        if (!IsInstitutionalAccount) return Forbid();
         if (CurrentChurchId is not int churchId) return Unauthorized();
 
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == request.UserId && u.ChurchId == churchId, cancellationToken);
@@ -263,6 +252,12 @@ public sealed class ChurchSettingsController(
 
         var memberRole = await db.Roles.FirstOrDefaultAsync(r => r.ChurchId == churchId && r.Name == "Membro", cancellationToken);
         if (memberRole != null) user.CargoId = memberRole.Id;
+
+        var adminRole = await db.Roles.FirstOrDefaultAsync(r => r.ChurchId == churchId && r.Name == "Administrador", cancellationToken);
+        if (adminRole != null)
+            adminRole.Users = await db.Users.CountAsync(u => u.ChurchId == churchId && u.CargoId == adminRole.Id, cancellationToken);
+        if (memberRole != null)
+            memberRole.Users = await db.Users.CountAsync(u => u.ChurchId == churchId && u.CargoId == memberRole.Id, cancellationToken);
 
         // Auditoria
         db.AuditLogs.Add(new AuditLog
@@ -294,11 +289,147 @@ public sealed class ChurchSettingsController(
     }
 
     /// <summary>
+    /// Atualiza os dados básicos de um administrador, mantendo o vínculo com o membro.
+    /// </summary>
+    [HttpPut("admins/{userId:int}")]
+    public async Task<IActionResult> UpdateAdmin(int userId, [FromBody] UpdateAdminRequest request, CancellationToken cancellationToken)
+    {
+        if (!IsInstitutionalAccount) return Forbid();
+        if (CurrentChurchId is not int churchId) return Unauthorized();
+
+        var name = request.Name?.Trim() ?? string.Empty;
+        var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+        var phone = request.Phone?.Trim() ?? string.Empty;
+
+        if (name.Length is < 2 or > 160)
+            return BadRequest(new { message = "O nome deve ter entre 2 e 160 caracteres." });
+        if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email) || email.Length > 254)
+            return BadRequest(new { message = "Informe um e-mail válido." });
+        if (phone.Length > 40)
+            return BadRequest(new { message = "O telefone deve ter até 40 caracteres." });
+
+        var admin = await db.Users.FirstOrDefaultAsync(
+            u => u.Id == userId && u.ChurchId == churchId && u.Role == "Administrador" && u.IsActive,
+            cancellationToken);
+        if (admin is null) return NotFound(new { message = "Administrador ativo não encontrado nesta igreja." });
+
+        var emailInUse = await db.Users.AnyAsync(u => u.Id != userId && u.Email == email, cancellationToken)
+            || await db.Churches.AnyAsync(c => c.Email == email, cancellationToken);
+        if (emailInUse)
+            return Conflict(new { message = "Este e-mail já está vinculado a outra conta." });
+
+        var oldEmail = admin.Email;
+        admin.Name = name;
+        admin.Email = email;
+        admin.Phone = phone;
+
+        var member = await db.Members.FirstOrDefaultAsync(
+            m => m.ChurchId == churchId && (m.UserId == admin.Id || m.Email == oldEmail),
+            cancellationToken);
+        if (member is not null)
+        {
+            member.UserId = admin.Id;
+            member.Name = name;
+            member.Email = email;
+            member.Phone = phone;
+            member.Role = "Administrador";
+        }
+
+        db.AuditLogs.Add(new AuditLog
+        {
+            ChurchId = churchId,
+            PerformedByEmail = CurrentUserEmail,
+            TargetUserId = admin.Id,
+            TargetUserEmail = email,
+            Action = "AdminUpdated",
+            Details = $"Dados do administrador '{oldEmail}' atualizados por '{CurrentUserEmail}'.",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        await notificationService.NotifyEntityChangedAsync(churchId, "roles", "admin-updated", new { userId = admin.Id }, adminOnly: true);
+
+        return Ok(new AdminUserResponse(
+            admin.Id,
+            member?.Id,
+            admin.Name,
+            admin.Email,
+            admin.Phone ?? string.Empty,
+            admin.Role,
+            admin.IsActive,
+            admin.CreatedAt));
+    }
+
+    /// <summary>
+    /// Revoga o acesso administrativo sem apagar o histórico ou o cadastro de membro.
+    /// </summary>
+    [HttpDelete("admins/{userId:int}")]
+    public async Task<IActionResult> DeleteAdmin(int userId, CancellationToken cancellationToken)
+    {
+        if (!IsInstitutionalAccount) return Forbid();
+        if (CurrentChurchId is not int churchId) return Unauthorized();
+
+        var admin = await db.Users.FirstOrDefaultAsync(
+            u => u.Id == userId && u.ChurchId == churchId && u.Role == "Administrador" && u.IsActive,
+            cancellationToken);
+        if (admin is null) return NotFound(new { message = "Administrador ativo não encontrado nesta igreja." });
+
+        var activeAdmins = await db.Users.CountAsync(
+            u => u.ChurchId == churchId && u.Role == "Administrador" && u.IsActive,
+            cancellationToken);
+        if (activeAdmins <= 1)
+            return BadRequest(new { message = "A igreja precisa manter pelo menos um administrador ativo." });
+
+        // Remove o privilégio administrativo, mas preserva a conta para o usuário continuar como membro.
+        admin.Role = "Membro";
+
+        var member = await db.Members.FirstOrDefaultAsync(
+            m => m.ChurchId == churchId && (m.UserId == admin.Id || m.Email == admin.Email),
+            cancellationToken);
+        if (member is not null) member.Role = "Membro";
+
+        var memberRole = await db.Roles.FirstOrDefaultAsync(
+            r => r.ChurchId == churchId && r.Name == "Membro",
+            cancellationToken);
+        if (memberRole is not null) admin.CargoId = memberRole.Id;
+
+        var adminRole = await db.Roles.FirstOrDefaultAsync(
+            r => r.ChurchId == churchId && r.Name == "Administrador",
+            cancellationToken);
+
+        if (adminRole is not null)
+            adminRole.Users = await db.Users.CountAsync(
+                u => u.ChurchId == churchId && u.CargoId == adminRole.Id && u.IsActive,
+                cancellationToken);
+        if (memberRole is not null)
+            memberRole.Users = await db.Users.CountAsync(
+                u => u.ChurchId == churchId && u.CargoId == memberRole.Id && u.IsActive,
+                cancellationToken);
+
+        db.AuditLogs.Add(new AuditLog
+        {
+            ChurchId = churchId,
+            PerformedByEmail = CurrentUserEmail,
+            TargetUserId = admin.Id,
+            TargetUserEmail = admin.Email,
+            Action = "AdminAccessRevoked",
+            Details = $"O acesso administrativo de '{admin.Email}' foi revogado por '{CurrentUserEmail}'. O acesso como membro foi preservado.",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        await notificationService.NotifyEntityChangedAsync(churchId, "roles", "admin-deleted", new { userId = admin.Id }, adminOnly: true);
+
+        return NoContent();
+    }
+
+    /// <summary>
     /// Histórico de auditoria da igreja.
     /// </summary>
     [HttpGet("audit-logs")]
     public async Task<IActionResult> GetAuditLogs(CancellationToken cancellationToken)
     {
+        if (!IsInstitutionalAccount) return Forbid();
         if (CurrentChurchId is not int churchId) return Unauthorized();
 
         var logs = await db.AuditLogs.AsNoTracking()

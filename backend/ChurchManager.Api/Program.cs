@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using ChurchManager.Api.Data;
 using ChurchManager.Api.Hubs;
@@ -170,6 +171,51 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
                 context.Token = accessToken;
             }
             return Task.CompletedTask;
+        },
+        OnTokenValidated = async context =>
+        {
+            var principal = context.Principal;
+            var role = principal?.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+
+            if (!int.TryParse(principal?.FindFirstValue("church_id"), out var churchId))
+            {
+                context.Fail("Sessão sem igreja vinculada.");
+                return;
+            }
+
+            using var scope = context.HttpContext.RequestServices.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            if (string.Equals(role, "Igreja", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!int.TryParse(principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var institutionalId)
+                    || institutionalId != -churchId)
+                {
+                    context.Fail("Sessão institucional inválida.");
+                    return;
+                }
+
+                var activeChurch = await db.Churches.AsNoTracking()
+                    .AnyAsync(church => church.Id == churchId && church.IsActive);
+
+                if (!activeChurch) context.Fail("A instituição está inativa.");
+                return;
+            }
+
+            if (!int.TryParse(principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+            {
+                context.Fail("Sessão sem usuário vinculado.");
+                return;
+            }
+
+            var activeUser = await db.Users.AsNoTracking()
+                .AnyAsync(user =>
+                    user.Id == userId &&
+                    user.ChurchId == churchId &&
+                    user.IsActive &&
+                    user.Role == role);
+
+            if (!activeUser) context.Fail("A conta foi desativada ou teve suas permissões alteradas.");
         }
     };
 });

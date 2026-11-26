@@ -3,9 +3,10 @@ import Button from '../../components/ui/Button.jsx';
 import InputField from '../../components/ui/InputField.jsx';
 import { api } from '../../services/httpClient.js';
 import './SettingsPage.css';
+import AdminsManagement from './AdminsManagement.jsx';
 import '../../components/ui/Panel.css';
 
-export default function SettingsPage({ data, setData, demo, tell }) {
+export default function SettingsPage({ data, setData, demo, tell, user }) {
   const updateSetting = (key, value) => {
     setData((current) => ({
       ...current,
@@ -48,7 +49,8 @@ export default function SettingsPage({ data, setData, demo, tell }) {
   }
 
   return (
-    <section className="panel settings-panel">
+    <>
+      <section className="panel settings-panel">
       <div className="panel-heading">
         <div>
           <h2>Dados da instituição</h2>
@@ -73,6 +75,11 @@ export default function SettingsPage({ data, setData, demo, tell }) {
           <p>Os dados administrativos devem ficar disponíveis apenas para usuários autorizados. Não utilize informações pessoais reais na demonstração pública.</p>
         </div>
       </div>
-    </section>
+      </section>
+
+      {user?.role === 'Igreja' && !demo && (
+        <AdminsManagement tell={tell} />
+      )}
+    </>
   );
 }

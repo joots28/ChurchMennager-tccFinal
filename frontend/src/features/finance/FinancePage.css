@@ -46,3 +46,74 @@
     font-size: 21px;
   }
 }
+
+
+.pending-donations-panel {
+  margin-bottom: 18px;
+}
+
+.pending-donations-list {
+  display: grid;
+  gap: 0;
+}
+
+.pending-donation-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.5fr) minmax(90px, .7fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 15px 20px;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+
+.pending-donation-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pending-donation-main strong {
+  overflow-wrap: anywhere;
+}
+
+.pending-donation-main span {
+  color: var(--text-muted, #64748b);
+  font-size: 12px;
+}
+
+.pending-donation-amount {
+  white-space: nowrap;
+}
+
+.pending-donation-row a {
+  color: var(--primary, #2563eb);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.pending-donation-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  .pending-donation-row {
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+
+  .pending-donation-row a {
+    grid-column: 1 / -1;
+  }
+
+  .pending-donation-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .pending-donation-actions .btn {
+    flex: 1;
+  }
+}
