@@ -18,6 +18,7 @@ public sealed class AuthController(
     AppDbContext db,
     IPasswordHasher<AppUser> userHasher,
     IPasswordHasher<Church> churchHasher,
+    IPasswordHasher<PlatformAdmin> platformAdminHasher,
     ITokenService tokenService,
     IChurchNotificationService notificationService,
     ILogger<AuthController> logger) : ControllerBase
@@ -298,11 +299,23 @@ public sealed class AuthController(
         if (identifier.Length is 0 or > 254 || password.Length is 0 or > 128)
             return BadRequest(new { message = "Informe e-mail e senha." });
 
-        if (!identifier.Contains('@') || !new EmailAddressAttribute().IsValid(identifier))
+        if (accessMode != "superadmin" && (!identifier.Contains('@') || !new EmailAddressAttribute().IsValid(identifier)))
             return BadRequest(new { message = "Utilize o e-mail cadastrado para entrar." });
 
-        if (accessMode is not ("church" or "admin" or "member"))
-            return BadRequest(new { message = "Modalidade de acesso inválida. Use 'church', 'admin' ou 'member'." });
+        if (accessMode is not ("church" or "admin" or "member" or "superadmin"))
+            return BadRequest(new { message = "Modalidade de acesso inválida." });
+
+        if (accessMode == "superadmin")
+        {
+            var username = identifier.ToLowerInvariant();
+            var platformAdmin = await db.PlatformAdmins.FirstOrDefaultAsync(a => a.Username == username && a.IsActive, cancellationToken);
+            if (platformAdmin is null || platformAdminHasher.VerifyHashedPassword(platformAdmin, platformAdmin.PasswordHash, password) == PasswordVerificationResult.Failed)
+                return Unauthorized(new { message = "Usuário ou senha inválidos." });
+
+            var platformToken = tokenService.GeneratePlatformAdminToken(platformAdmin);
+            return Ok(new AuthResponse(platformToken, platformAdmin.Id, platformAdmin.Name, platformAdmin.Email,
+                "SuperAdministrador", 0, "Plataforma ChurchManager", "superadmin"));
+        }
 
         // MODALIDADE 1: Entrar como Igreja
         if (accessMode == "church")
@@ -415,6 +428,18 @@ public sealed class AuthController(
     {
         var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
         var churchIdStr = User.FindFirstValue("church_id");
+
+        var accessMode = User.FindFirstValue("access_mode");
+        if (string.Equals(accessMode, "superadmin", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var platformAdminId))
+                return Unauthorized(new { message = "Sessão de plataforma inválida." });
+            var platformAdmin = await db.PlatformAdmins.AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == platformAdminId && a.IsActive, cancellationToken);
+            if (platformAdmin is null) return Unauthorized(new { message = "Conta de plataforma inativa." });
+            return Ok(new { id = platformAdmin.Id, name = platformAdmin.Name, email = platformAdmin.Email,
+                role = "SuperAdministrador", churchId = (int?)null, churchName = (string?)null, accessMode = "superadmin" });
+        }
 
         if (!int.TryParse(churchIdStr, out var churchId))
             return Unauthorized(new { message = "Sessão inválida: identificador da igreja ausente." });
