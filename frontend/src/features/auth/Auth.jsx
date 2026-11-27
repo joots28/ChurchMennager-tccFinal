@@ -12,12 +12,12 @@ function initialMode() {
   const pathname = window.location.pathname.toLowerCase();
   if (pathname.startsWith('/igreja')) return 'church';
   if (pathname.startsWith('/membro')) return 'member';
-  if (pathname.startsWith('/superadmin')) return 'superadmin';
   return 'admin';
 }
 
 export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initialNotice = '' }) {
-  const [accessMode, setAccessMode] = useState(initialMode);
+  const isPlatformEntry = window.location.pathname.toLowerCase().startsWith('/superadmin');
+  const [accessMode, setAccessMode] = useState(() => isPlatformEntry ? 'superadmin' : initialMode());
   const [screen, setScreen] = useState('login');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -79,22 +79,6 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
         throw new Error('As senhas não coincidem.');
       }
 
-      if (accessMode === 'church') {
-        if (form.churchName.trim().length < 2 || !form.email.trim()) {
-          throw new Error('Preencha o nome da igreja e o e-mail institucional.');
-        }
-
-        await onRegister({
-          name: form.churchName.trim(),
-          denomination: form.denomination.trim(),
-          email: form.email.trim(),
-          password: form.password,
-          phone: form.phone.trim(),
-          address: form.address.trim()
-        }, 'church');
-        return;
-      }
-
       if (accessMode === 'member') {
         if (form.name.trim().length < 2 || !form.email.trim() || !form.churchId) {
           throw new Error('Preencha seu nome, e-mail e selecione uma igreja existente.');
@@ -126,15 +110,13 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
   const title = screen === 'recover'
     ? 'Recuperar senha'
     : isRegister
-      ? isChurch ? 'Cadastrar igreja' : 'Criar conta de membro'
-      : isChurch ? 'Acesso institucional' : isMember ? 'Portal do Membro' : isSuperAdmin ? 'Acesso da plataforma' : 'Acesso Administrativo';
+      ? 'Criar conta de membro'
+      : isPlatformEntry ? 'Acesso da plataforma' : isChurch ? 'Acesso institucional' : isMember ? 'Portal do Membro' : 'Acesso Administrativo';
 
   const subtitle = screen === 'recover'
     ? 'Entre em contato com a administração para recuperar seu acesso.'
     : isRegister
-      ? isChurch
-        ? 'Cadastre a instituição e crie suas credenciais de acesso.'
-        : 'Sua conta será vinculada a uma igreja já cadastrada.'
+      ? 'Sua conta será vinculada a uma igreja já cadastrada.'
       : isChurch
         ? 'Acesse as configurações institucionais da sua igreja.'
         : isMember
@@ -150,12 +132,13 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
           <ThemeToggle theme={theme} onToggle={onToggleTheme} className="auth-theme-toggle" />
           <div className="auth-brand"><Brand /></div>
 
-          <nav className="auth-portals" aria-label="Tipo de acesso">
-            <button type="button" className={isChurch ? 'active' : ''} onClick={() => selectMode('church')}>Igreja</button>
-            <button type="button" className={accessMode === 'admin' ? 'active' : ''} onClick={() => selectMode('admin')}>Administrador</button>
-            <button type="button" className={isMember ? 'active' : ''} onClick={() => selectMode('member')}>Membro</button>
-            <button type="button" className={isSuperAdmin ? 'active' : ''} onClick={() => selectMode('superadmin')}>Plataforma</button>
-          </nav>
+          {!isPlatformEntry && (
+            <nav className="auth-portals" aria-label="Tipo de acesso">
+              <button type="button" className={isChurch ? 'active' : ''} onClick={() => selectMode('church')}>Igreja</button>
+              <button type="button" className={accessMode === 'admin' ? 'active' : ''} onClick={() => selectMode('admin')}>Administrador</button>
+              <button type="button" className={isMember ? 'active' : ''} onClick={() => selectMode('member')}>Membro</button>
+            </nav>
+          )}
 
           {screen === 'recover' && (
             <button className="back-link" type="button" onClick={() => { setScreen('login'); setError(''); }}>
@@ -172,18 +155,11 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
           <form id="auth-form" className="auth-form" onSubmit={submit}>
             {isRegister && (
               <>
-                {isChurch ? (
-                  <>
-                    <InputField label="Nome da igreja" name="churchName" value={form.churchName} onChange={change} placeholder="Nome oficial da igreja" icon="building" minLength={2} maxLength={100} required />
-                    <InputField label="Denominação (opcional)" name="denomination" value={form.denomination} onChange={change} placeholder="Ex.: Batista, Metodista..." maxLength={100} />
-                  </>
-                ) : (
-                  <InputField
-                    label="Nome completo" name="name" value={form.name} onChange={change}
-                    placeholder="Seu nome e sobrenome" icon="user"
-                    minLength={2} maxLength={160} autoComplete="name" required
-                  />
-                )}
+                <InputField
+                  label="Nome completo" name="name" value={form.name} onChange={change}
+                  placeholder="Seu nome e sobrenome" icon="user"
+                  minLength={2} maxLength={160} autoComplete="name" required
+                />
               </>
             )}
 
@@ -213,13 +189,6 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
                 </div>
                 <InputField label="Telefone (opcional)" name="phone" value={form.phone} onChange={change} placeholder="(00) 00000-0000" maxLength={40} />
                 <InputField label="Ministério (opcional)" name="ministry" value={form.ministry} onChange={change} placeholder="Ex.: Louvor, Recepção..." maxLength={120} />
-              </>
-            )}
-
-            {isRegister && isChurch && (
-              <>
-                <InputField label="Telefone (opcional)" name="phone" value={form.phone} onChange={change} maxLength={40} />
-                <InputField label="Endereço (opcional)" name="address" value={form.address} onChange={change} maxLength={250} />
               </>
             )}
 
@@ -273,11 +242,11 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
           {screen === 'login' ? (
             isMember
               ? <p>Não possui acesso? <button type="button" onClick={() => { setScreen('register'); setError(''); setNotice(''); }}>Criar cadastro</button></p>
-              : isSuperAdmin
+              : isPlatformEntry
                 ? <p>Conta restrita. Solicite acesso ao responsável pela plataforma.</p>
                 : isChurch
-                  ? <p>Novas igrejas são cadastradas exclusivamente pela administração da plataforma.</p>
-                  : <p>Precisa cadastrar uma igreja? <button type="button" onClick={() => selectMode('church')}>Entrar como Igreja</button></p>
+                  ? <p>O acesso institucional é fornecido pela administração da plataforma.</p>
+                  : <p>O cadastro de membros é realizado pelo portal do Membro.</p>
           ) : screen === 'register' ? (
             <p>Já possui uma conta? <button type="button" onClick={() => { setScreen('login'); setError(''); }}>Entrar</button></p>
           ) : (
