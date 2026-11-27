@@ -306,9 +306,11 @@ if (app.Configuration.GetValue<bool>("Database:ApplyMigrations") ||
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var userHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<AppUser>>();
     var churchHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<Church>>();
+    var platformHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<PlatformAdmin>>();
     try
     {
         await db.Database.MigrateAsync();
+        await BootstrapPlatformAdminsAsync(db, platformHasher, app.Logger);
         // Dados de demonstração nunca são inseridos em produção.
         // Em produção, a criação da primeira igreja ocorre pelo fluxo institucional.
         if (app.Environment.IsDevelopment() &&
@@ -358,3 +360,33 @@ static string PreparePostgresConnectionString(string value, bool requireSsl)
 }
 
 public partial class Program { }
+
+
+static async Task BootstrapPlatformAdminsAsync(AppDbContext db, IPasswordHasher<PlatformAdmin> hasher, ILogger logger)
+{
+    var raw = Environment.GetEnvironmentVariable("PLATFORM_ADMINS_JSON");
+    var initialPassword = Environment.GetEnvironmentVariable("PLATFORM_ADMIN_INITIAL_PASSWORD");
+    if (string.IsNullOrWhiteSpace(raw)) return;
+    if (string.IsNullOrWhiteSpace(initialPassword) || initialPassword.Length < 12)
+        throw new InvalidOperationException("PLATFORM_ADMIN_INITIAL_PASSWORD precisa ter pelo menos 12 caracteres para provisionar superadministradores.");
+
+    var admins = System.Text.Json.JsonSerializer.Deserialize<List<PlatformAdminSeed>>(raw,
+        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+    foreach (var seed in admins)
+    {
+        var username = seed.Username?.Trim().ToLowerInvariant();
+        var email = seed.Email?.Trim().ToLowerInvariant();
+        var name = seed.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(name))
+            throw new InvalidOperationException("Cada superadministrador precisa conter username, name e email válidos.");
+        var exists = await db.PlatformAdmins.AnyAsync(x => x.Username == username || x.Email == email);
+        if (exists) continue;
+        var admin = new PlatformAdmin { Username = username, Name = name, Email = email, IsActive = true, CreatedAt = DateTime.UtcNow };
+        admin.PasswordHash = hasher.HashPassword(admin, initialPassword);
+        db.PlatformAdmins.Add(admin);
+    }
+    await db.SaveChangesAsync();
+    logger.LogInformation("Provisionamento inicial de superadministradores concluído (contas existentes preservadas).");
+}
+
+sealed record PlatformAdminSeed(string? Username, string? Name, string? Email);
