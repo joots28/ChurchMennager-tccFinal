@@ -27,7 +27,7 @@ public sealed class AuthController(
     /// FLUXO 1 — Entrar como Igreja: Cadastro Institucional de Nova Igreja.
     /// Único fluxo com permissão para criar uma nova igreja no sistema.
     /// </summary>
-    [AllowAnonymous]
+    [Authorize(Roles = "SuperAdministrador")]
     [EnableRateLimiting("Auth")]
     [HttpPost("register-church")]
     public async Task<IActionResult> RegisterChurch([FromBody] ChurchRegisterRequest request, CancellationToken cancellationToken)
