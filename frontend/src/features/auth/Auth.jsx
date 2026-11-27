@@ -271,11 +271,13 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
           </div>
 
           {screen === 'login' ? (
-            isChurch || isMember
+            isMember
               ? <p>Não possui acesso? <button type="button" onClick={() => { setScreen('register'); setError(''); setNotice(''); }}>Criar cadastro</button></p>
               : isSuperAdmin
                 ? <p>Conta restrita. Solicite acesso ao responsável pela plataforma.</p>
-                : <p>Precisa cadastrar uma igreja? <button type="button" onClick={() => selectMode('church')}>Entrar como Igreja</button></p>
+                : isChurch
+                  ? <p>Novas igrejas são cadastradas exclusivamente pela administração da plataforma.</p>
+                  : <p>Precisa cadastrar uma igreja? <button type="button" onClick={() => selectMode('church')}>Entrar como Igreja</button></p>
           ) : screen === 'register' ? (
             <p>Já possui uma conta? <button type="button" onClick={() => { setScreen('login'); setError(''); }}>Entrar</button></p>
           ) : (
