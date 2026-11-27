@@ -44,6 +44,27 @@ public sealed class TokenService(IConfiguration config) : ITokenService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
+    public string GeneratePlatformAdminToken(PlatformAdmin admin)
+    {
+        var key = Environment.GetEnvironmentVariable("JWT_KEY") ?? config["Jwt:Key"] ?? "";
+        if (string.IsNullOrWhiteSpace(key) || key.Length < 32)
+            throw new InvalidOperationException("JWT_KEY deve possuir no mínimo 32 caracteres.");
+        var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER") ?? config["Jwt:Issuer"] ?? "ChurchManager.Api";
+        var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") ?? config["Jwt:Audience"] ?? "ChurchManager.Web";
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, admin.Id.ToString()),
+            new Claim(ClaimTypes.Name, admin.Name),
+            new Claim(ClaimTypes.Email, admin.Email),
+            new Claim(ClaimTypes.Role, "SuperAdministrador"),
+            new Claim("access_mode", "superadmin")
+        };
+        var credentials = new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)), SecurityAlgorithms.HmacSha256);
+        var jwt = new JwtSecurityToken(issuer: issuer, audience: audience, claims: claims,
+            notBefore: DateTime.UtcNow.AddSeconds(-30), expires: DateTime.UtcNow.AddHours(12), signingCredentials: credentials);
+        return new JwtSecurityTokenHandler().WriteToken(jwt);
+    }
+
     public string GenerateChurchInstitutionalToken(Church church)
     {
         return GenerateToken(
