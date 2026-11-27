@@ -38,15 +38,18 @@
 }
 
 .input-trailing {
-  width: 28px;
+  min-width: 56px;
   height: 32px;
   display: grid;
   place-items: center;
   flex: none;
-  color: #94a3b8;
+  color: #2563eb;
   background: transparent;
   border: 0;
-  padding: 0;
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
   border-radius: 6px;
 }
 
