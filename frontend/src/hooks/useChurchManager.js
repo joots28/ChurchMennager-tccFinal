@@ -132,7 +132,7 @@ export default function useChurchManager() {
   // Atualizações em tempo real: o SignalR envia apenas metadados; os dados são
   // recarregados pelos endpoints que já aplicam as permissões do usuário.
   useEffect(() => {
-    if (demo || !user) return undefined;
+    if (demo || !user || user.role === 'SuperAdministrador') return undefined;
 
     initSignalR(API_URL);
     const unsubscribe = subscribeToUpdates(payload => {
