@@ -197,7 +197,7 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
                 label="Senha" name="password" value={form.password} onChange={change}
                 placeholder={isRegister ? 'Mínimo de 8 caracteres' : 'Sua senha'}
                 type={showPassword ? 'text' : 'password'} icon="lock"
-                rightIcon={showPassword ? 'eye-off' : 'eye'}
+                rightLabel={showPassword ? 'Ocultar' : 'Mostrar'}
                 onRightClick={() => setShowPassword(value => !value)}
                 minLength={isRegister ? 8 : 1} maxLength={128}
                 autoComplete={isRegister ? 'new-password' : 'current-password'} required
@@ -209,7 +209,7 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
                 label="Confirmar senha" name="confirm" value={form.confirm} onChange={change}
                 placeholder="Digite a senha novamente" type={showPassword ? 'text' : 'password'}
                 icon="lock" minLength={8} maxLength={128} autoComplete="new-password" required
-                rightIcon={showPassword ? 'eye-off' : 'eye'} onRightClick={() => setShowPassword(value => !value)}
+                rightLabel={showPassword ? 'Ocultar' : 'Mostrar'} onRightClick={() => setShowPassword(value => !value)}
               />
             )}
 
