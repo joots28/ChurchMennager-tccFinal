@@ -12,6 +12,7 @@ function initialMode() {
   const pathname = window.location.pathname.toLowerCase();
   if (pathname.startsWith('/igreja')) return 'church';
   if (pathname.startsWith('/membro')) return 'member';
+  if (pathname.startsWith('/superadmin')) return 'superadmin';
   return 'admin';
 }
 
@@ -121,11 +122,12 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
   const isRegister = screen === 'register';
   const isChurch = accessMode === 'church';
   const isMember = accessMode === 'member';
+  const isSuperAdmin = accessMode === 'superadmin';
   const title = screen === 'recover'
     ? 'Recuperar senha'
     : isRegister
       ? isChurch ? 'Cadastrar igreja' : 'Criar conta de membro'
-      : isChurch ? 'Acesso institucional' : isMember ? 'Portal do Membro' : 'Acesso Administrativo';
+      : isChurch ? 'Acesso institucional' : isMember ? 'Portal do Membro' : isSuperAdmin ? 'Acesso da plataforma' : 'Acesso Administrativo';
 
   const subtitle = screen === 'recover'
     ? 'Entre em contato com a administração para recuperar seu acesso.'
@@ -137,7 +139,9 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
         ? 'Acesse as configurações institucionais da sua igreja.'
         : isMember
           ? 'Acesse eventos, escalas e informações da sua comunidade.'
-          : 'Acesse a gestão administrativa da sua igreja.';
+          : isSuperAdmin
+            ? 'Área restrita aos responsáveis pela plataforma ChurchManager.'
+            : 'Acesse a gestão administrativa da sua igreja.';
 
   return (
     <main className="auth-page">
@@ -150,6 +154,7 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
             <button type="button" className={isChurch ? 'active' : ''} onClick={() => selectMode('church')}>Igreja</button>
             <button type="button" className={accessMode === 'admin' ? 'active' : ''} onClick={() => selectMode('admin')}>Administrador</button>
             <button type="button" className={isMember ? 'active' : ''} onClick={() => selectMode('member')}>Membro</button>
+            <button type="button" className={isSuperAdmin ? 'active' : ''} onClick={() => selectMode('superadmin')}>Plataforma</button>
           </nav>
 
           {screen === 'recover' && (
@@ -184,10 +189,10 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
 
             {(screen !== 'recover') && (
               <InputField
-                label={isChurch ? 'E-mail institucional' : 'E-mail'}
+                label={isSuperAdmin ? 'Nome de usuário' : isChurch ? 'E-mail institucional' : 'E-mail'}
                 name="email" value={form.email} onChange={change}
-                placeholder={isChurch ? 'contato@igreja.com.br' : 'voce@email.com'}
-                type="email" icon="mail" maxLength={254}
+                placeholder={isSuperAdmin ? 'seu usuário' : isChurch ? 'contato@igreja.com.br' : 'voce@email.com'}
+                type={isSuperAdmin ? 'text' : 'email'} icon={isSuperAdmin ? 'user' : 'mail'} maxLength={254}
                 autoComplete={isRegister ? 'email' : 'username'} required
               />
             )}
@@ -247,6 +252,8 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
               </div>
             )}
 
+            {isSuperAdmin && <p className="auth-access-note">Acesso privado. Utilize o usuário fornecido pela equipe da plataforma.</p>}
+
             {accessMode === 'admin' && isRegister === false && (
               <p className="auth-access-note">O acesso administrativo é concedido por um administrador nas configurações da igreja. Não existe cadastro público de administrador.</p>
             )}
@@ -266,7 +273,9 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
           {screen === 'login' ? (
             isChurch || isMember
               ? <p>Não possui acesso? <button type="button" onClick={() => { setScreen('register'); setError(''); setNotice(''); }}>Criar cadastro</button></p>
-              : <p>Precisa cadastrar uma igreja? <button type="button" onClick={() => selectMode('church')}>Entrar como Igreja</button></p>
+              : isSuperAdmin
+                ? <p>Conta restrita. Solicite acesso ao responsável pela plataforma.</p>
+                : <p>Precisa cadastrar uma igreja? <button type="button" onClick={() => selectMode('church')}>Entrar como Igreja</button></p>
           ) : screen === 'register' ? (
             <p>Já possui uma conta? <button type="button" onClick={() => { setScreen('login'); setError(''); }}>Entrar</button></p>
           ) : (
