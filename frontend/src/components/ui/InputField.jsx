@@ -4,7 +4,7 @@ import './InputField.css';
 
 export default function InputField({
   label, name, value, onChange, placeholder, type = 'text', required = false,
-  icon, min, max, step, minLength, maxLength, autoComplete, rightIcon, onRightClick
+  icon, min, max, step, minLength, maxLength, autoComplete, rightIcon, rightLabel, onRightClick
 }) {
   return (
     <label className="field">
@@ -25,14 +25,14 @@ export default function InputField({
           maxLength={maxLength}
           autoComplete={autoComplete}
         />
-        {rightIcon && (
+        {(rightIcon || rightLabel) && (
           <button
             className="input-trailing"
             type="button"
             onClick={onRightClick}
             aria-label={type === 'password' ? 'Mostrar senha' : 'Ocultar senha'}
           >
-            <Icon name={rightIcon} size={18} />
+            {rightLabel || <Icon name={rightIcon} size={18} />}
           </button>
         )}
       </span>
