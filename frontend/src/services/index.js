@@ -4,7 +4,10 @@ export {
   apiRegisterChurch,
   apiRegisterMember,
   apiGetPublicChurches,
-  apiCheckSession
+  apiCheckSession,
+  apiGetPlatformChurches,
+  apiCreatePlatformChurch,
+  apiChangePlatformPassword
 } from './authService.js';
 export { apiResource } from './resourceService.js';
 export { initSignalR, subscribeToUpdates, stopSignalR } from './signalrService.js';
