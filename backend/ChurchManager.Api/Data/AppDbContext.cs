@@ -6,6 +6,7 @@ namespace ChurchManager.Api.Data;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Church> Churches => Set<Church>();
+    public DbSet<PlatformAdmin> PlatformAdmins => Set<PlatformAdmin>();
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<Member> Members => Set<Member>();
     public DbSet<Ministry> Ministries => Set<Ministry>();
@@ -22,6 +23,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<PlatformAdmin>(entity =>
+        {
+            entity.ToTable("PlatformAdmins");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Username).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(254).IsRequired();
+            entity.Property(x => x.PasswordHash).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(x => x.Username).IsUnique();
+            entity.HasIndex(x => x.Email).IsUnique();
+        });
 
         modelBuilder.Entity<Church>(entity =>
         {
