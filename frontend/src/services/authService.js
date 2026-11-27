@@ -84,6 +84,21 @@ export async function apiRegisterMember(data) {
   };
 }
 
+export async function apiGetPlatformChurches() {
+  return api('/api/platform/churches');
+}
+
+export async function apiCreatePlatformChurch(data) {
+  return api('/api/platform/churches', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function apiChangePlatformPassword(currentPassword, newPassword) {
+  return api('/api/platform/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword })
+  });
+}
+
 export async function apiGetPublicChurches(search = '') {
   const query = search ? `?search=${encodeURIComponent(search)}` : '';
   return api(`/api/churches${query}`);
