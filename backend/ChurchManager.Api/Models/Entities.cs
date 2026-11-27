@@ -397,3 +397,18 @@ public sealed class AuditLog : ChurchEntity
     [StringLength(1000)]
     public string Details { get; set; } = string.Empty;
 }
+
+
+/// <summary>Identidade administrativa global, sem vínculo com uma igreja.</summary>
+[Table("PlatformAdmins")]
+public sealed class PlatformAdmin
+{
+    [Key] public int Id { get; set; }
+    [Required, StringLength(80)] public string Username { get; set; } = string.Empty;
+    [Required, StringLength(160)] public string Name { get; set; } = string.Empty;
+    [Required, EmailAddress, StringLength(254)] public string Email { get; set; } = string.Empty;
+    [Required, StringLength(512), JsonIgnore] public string PasswordHash { get; set; } = string.Empty;
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+}
