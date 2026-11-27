@@ -132,7 +132,7 @@ export default function Auth({ onLogin, onRegister, theme, onToggleTheme, initia
           <ThemeToggle theme={theme} onToggle={onToggleTheme} className="auth-theme-toggle" />
           <div className="auth-brand"><Brand /></div>
 
-          {!isPlatformEntry && (
+          {!isPlatformEntry && !isRegister && (
             <nav className="auth-portals" aria-label="Tipo de acesso">
               <button type="button" className={isChurch ? 'active' : ''} onClick={() => selectMode('church')}>Igreja</button>
               <button type="button" className={accessMode === 'admin' ? 'active' : ''} onClick={() => selectMode('admin')}>Administrador</button>
