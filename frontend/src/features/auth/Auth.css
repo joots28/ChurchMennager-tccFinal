@@ -347,7 +347,13 @@ html[data-theme="dark"] .auth-access-note {
   color: #dbeafe;
 }
 
-@media (max-width: 540px) {\n  .auth-portals { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n}\n\n@media (max-width: 360px) {
+@media (max-width: 540px) {
+  .auth-portals {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 360px) {
   .auth-portals {
     margin-left: 16px;
     margin-right: 16px;
