@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { loadDemoData, saveDemoData } from '../services/demoStorage.js';
 import {
   api, API_URL, apiLogin, apiRegisterChurch, apiRegisterMember,
-  apiCheckSession, apiResource, DEMO_MODE,
+  apiCheckSession, apiResource, apiGetPlatformChurches, DEMO_MODE,
   initSignalR, subscribeToUpdates, stopSignalR
 } from '../services/index.js';
 import { moduleMeta } from '../config/navigation.js';
@@ -26,6 +26,10 @@ const emptyData = () => ({
 });
 
 async function loadRemoteData(user) {
+  if (user.role === 'SuperAdministrador' || user.accessMode === 'superadmin') {
+    const churches = await apiGetPlatformChurches();
+    return { platformChurches: churches };
+  }
   if (user.role === 'Igreja') {
     const [settings, admins, eligibleMembers] = await Promise.all([
       api('/api/church/settings'),
@@ -166,7 +170,7 @@ export default function useChurchManager() {
 
   async function login(identifier, password, accessMode = 'admin') {
     const loginIdentifier = String(identifier || '').trim();
-    if (!loginIdentifier || !password) throw new Error('Informe seu e-mail e senha.');
+    if (!loginIdentifier || !password) throw new Error('Informe seu usuário e senha.');
 
     let result;
     if (demo) {
