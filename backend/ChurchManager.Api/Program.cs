@@ -66,6 +66,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Registro de Serviços de Domínio e Segurança
 builder.Services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
 builder.Services.AddScoped<IPasswordHasher<Church>, PasswordHasher<Church>>();
+builder.Services.AddScoped<IPasswordHasher<PlatformAdmin>, PasswordHasher<PlatformAdmin>>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IChurchNotificationService, ChurchNotificationService>();
 
@@ -177,6 +178,21 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
             var principal = context.Principal;
             var role = principal?.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
             var email = principal?.FindFirstValue(ClaimTypes.Email)?.Trim().ToLowerInvariant() ?? string.Empty;
+
+            if (string.Equals(principal?.FindFirstValue("access_mode"), "superadmin", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!int.TryParse(principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var platformAdminId))
+                {
+                    context.Fail("Sessão de plataforma inválida.");
+                    return;
+                }
+                using var platformScope = context.HttpContext.RequestServices.CreateScope();
+                var platformDb = platformScope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var activePlatformAdmin = await platformDb.PlatformAdmins.AsNoTracking()
+                    .AnyAsync(admin => admin.Id == platformAdminId && admin.IsActive && admin.Email == email);
+                if (!activePlatformAdmin) context.Fail("A conta de plataforma foi desativada.");
+                return;
+            }
 
             if (string.IsNullOrWhiteSpace(email)
                 || !int.TryParse(principal?.FindFirstValue("church_id"), out var churchId))
